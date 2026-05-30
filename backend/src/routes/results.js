@@ -255,6 +255,20 @@ router.get('/latest', async (req, res) => {
   }
 });
 
+// POST /api/results/:round/cache/clear — invalidate a cached round (requires CACHE_ADMIN_KEY header)
+router.post('/:round/cache/clear', (req, res) => {
+  const adminKey = process.env.CACHE_ADMIN_KEY;
+  if (adminKey && req.headers['x-admin-key'] !== adminKey)
+    return res.status(401).json({ error: 'Unauthorized' });
+  const roundNum = parseInt(req.params.round, 10);
+  if (isNaN(roundNum)) return res.status(400).json({ error: 'Invalid round' });
+  const year = new Date().getFullYear();
+  const ck   = `results_round_${year}_${roundNum}`;
+  cache.delete(ck);
+  console.log(`[results] cache manually cleared for round ${roundNum} (${ck})`);
+  res.json({ cleared: ck });
+});
+
 // GET /api/results/:round — full results for a specific round number
 router.get('/:round', async (req, res) => {
   const roundNum = parseInt(req.params.round, 10);
@@ -286,10 +300,15 @@ router.get('/:round', async (req, res) => {
     if (scheduleMeeting.isCancelled)
       return res.status(404).json({ error: 'Race cancelled' });
 
+    const sessionsSummary = scheduleMeeting.sessions
+      .map(s => `${s.sessionName}(key=${s.sessionKey},type=${s.sessionType})`)
+      .join(' | ');
+    console.log(`[results/${roundNum}] sessions: ${sessionsSummary}`);
+
     const raceSessionEntry = scheduleMeeting.sessions.find(
       s => s.sessionType === 'Race' && s.sessionName === 'Race' && new Date(s.dateEnd) < now
     );
-    console.log(`[results/${roundNum}] sessionKey: ${raceSessionEntry?.sessionKey ?? 'none'}`);
+    console.log(`[results/${roundNum}] selected sessionKey: ${raceSessionEntry?.sessionKey ?? 'none (race not completed)'} (filter: sessionType=Race AND sessionName=Race)`);
 
     if (!raceSessionEntry)
       return res.json({ round: roundNum, results: null, message: 'Race not yet completed' });
