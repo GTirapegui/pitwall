@@ -12,9 +12,11 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0C0C0E"
-      }
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.tirapegyi.pitwall"
     },
     "web": {
       "bundler": "metro",
@@ -26,6 +28,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b7e3fa59-ac20-4921-97df-69a12ee775bb"
+      }
     }
   }
 }
