@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const cache = require('../cache/memoryCache');
 const { getMeetings, getSessions, get } = require('../services/openf1');
+const { buildAndCacheSchedule } = require('./schedule');
 
 const TEAM_COLORS = {
   'McLaren': '#FF8000', 'Ferrari': '#E8002D', 'Mercedes': '#27F4D2',
@@ -266,32 +267,50 @@ router.get('/:round', async (req, res) => {
   if (cached) return res.json(cached);
 
   try {
-    const yearData = await getYearData(year);
-    if (!yearData) return res.status(503).json({ error: 'OpenF1 unavailable', results: null });
+    const [schedule, yearData] = await Promise.all([
+      buildAndCacheSchedule(year),
+      getYearData(year),
+    ]);
 
-    const { meetings, sessions } = yearData;
+    if (!schedule || !yearData)
+      return res.status(503).json({ error: 'OpenF1 unavailable', results: null });
+
     const now = new Date();
 
-    const raceWeekends = meetings
-      .filter(m => !m.meeting_name.toLowerCase().includes('test'))
-      .sort((a, b) => a.date_start.localeCompare(b.date_start));
+    const scheduleMeeting = schedule.meetings.find(m => m.round === roundNum);
+    console.log(`[results/${roundNum}] meeting: ${scheduleMeeting?.meetingName ?? 'NOT FOUND'} | isCancelled: ${scheduleMeeting?.isCancelled ?? false}`);
 
-    const meeting = raceWeekends[roundNum - 1];
-    if (!meeting) return res.status(404).json({ error: 'Round not found' });
+    if (!scheduleMeeting)
+      return res.status(404).json({ error: 'Round not found' });
 
-    const raceSession = sessions.find(
-      s => s.meeting_key === meeting.meeting_key &&
-           s.session_type === 'Race' && s.session_name === 'Race' &&
-           new Date(s.date_end) < now
+    if (scheduleMeeting.isCancelled)
+      return res.status(404).json({ error: 'Race cancelled' });
+
+    const raceSessionEntry = scheduleMeeting.sessions.find(
+      s => s.sessionType === 'Race' && new Date(s.dateEnd) < now
     );
-    if (!raceSession)
+    console.log(`[results/${roundNum}] sessionKey: ${raceSessionEntry?.sessionKey ?? 'none'}`);
+
+    if (!raceSessionEntry)
       return res.json({ round: roundNum, results: null, message: 'Race not yet completed' });
 
-    const meetingSessions = sessions.filter(s => s.meeting_key === meeting.meeting_key);
+    // Map camelCase schedule fields → snake_case for buildResultsForSession
+    const meeting = {
+      meeting_name:       scheduleMeeting.meetingName,
+      circuit_short_name: scheduleMeeting.circuitShortName,
+      country_name:       scheduleMeeting.countryName,
+      country_code:       scheduleMeeting.countryCode,
+      date_start:         scheduleMeeting.dateStart,
+    };
+
+    const meetingSessions = yearData.sessions.filter(s => s.meeting_key === scheduleMeeting.meetingKey);
+
     const result = await buildResultsForSession(
-      raceSession.session_key, roundNum, meeting, raceWeekends, meetingSessions
+      raceSessionEntry.sessionKey, roundNum, meeting, schedule.meetings, meetingSessions
     );
-    if (!result) return res.json({ round: roundNum, message: 'Race data not yet available from OpenF1', results: null });
+    if (!result)
+      return res.json({ round: roundNum, message: 'Race data not yet available from OpenF1', results: null });
+
     cache.set(cacheKey, result, 86400); // 24h — past race data never changes
     res.json(result);
   } catch (err) {

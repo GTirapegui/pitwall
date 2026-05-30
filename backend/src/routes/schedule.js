@@ -74,3 +74,4 @@ async function warmUpSchedule() {
 
 module.exports = router;
 module.exports.warmUpSchedule = warmUpSchedule;
+module.exports.buildAndCacheSchedule = buildAndCacheSchedule;
