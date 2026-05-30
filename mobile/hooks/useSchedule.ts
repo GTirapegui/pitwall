@@ -5,7 +5,7 @@ export function useSchedule() {
   const { data, error, isLoading, mutate } = useSWR<ScheduleResponse>(
     'schedule',
     api.schedule,
-    { refreshInterval: 0, revalidateOnFocus: false, dedupingInterval: 3_600_000 }
+    { refreshInterval: 0, revalidateOnFocus: false, revalidateOnMount: true, dedupingInterval: 300_000 }
   );
   return { data, error, isLoading, refresh: mutate };
 }

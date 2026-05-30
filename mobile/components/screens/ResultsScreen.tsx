@@ -225,12 +225,15 @@ export default function ResultsScreen() {
       .reverse(); // most recent first
   }, [schedData]);
 
-  // Auto-select most recent race
+  // Primitive derived from completedRaces — avoids array reference instability in effect deps
+  const latestCompletedRound = completedRaces[0]?.round ?? null;
+
+  // Auto-select most recent race — primitive deps only to prevent spurious re-runs
   useEffect(() => {
-    if (completedRaces.length > 0 && selectedRound === null) {
-      setSelectedRound(completedRaces[0].round);
+    if (latestCompletedRound !== null && selectedRound === null) {
+      setSelectedRound(latestCompletedRound);
     }
-  }, [completedRaces]);
+  }, [latestCompletedRound, selectedRound]);
 
   // Fetch results when round changes
   useEffect(() => {
