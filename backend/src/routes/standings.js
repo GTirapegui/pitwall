@@ -213,6 +213,23 @@ router.get('/drivers', async (req, res) => {
   }
 });
 
+function aggregateConstructors(driverStandings) {
+  const constructorMap = new Map();
+  for (const driver of driverStandings) {
+    if (!constructorMap.has(driver.teamName)) {
+      constructorMap.set(driver.teamName, {
+        teamName: driver.teamName, teamColor: driver.teamColor, points: 0, drivers: [],
+      });
+    }
+    const c = constructorMap.get(driver.teamName);
+    c.points += driver.points;
+    c.drivers.push(driver.abbreviation);
+  }
+  return Array.from(constructorMap.values())
+    .sort((a, b) => b.points - a.points)
+    .map((c, i) => ({ ...c, position: i + 1 }));
+}
+
 // GET /api/standings/constructors
 router.get('/constructors', async (req, res) => {
   const year     = new Date().getFullYear();
@@ -225,22 +242,7 @@ router.get('/constructors', async (req, res) => {
     // Reuse the same buildDriverStandings call (deduped via inFlight map) to avoid
     // firing duplicate OpenF1 requests when /drivers and /constructors are called together.
     const { standings: driverStandings, scoredSessions, totalSessions } = await withTimeout(buildDriverStandings(year), 45000);
-    const constructorMap = new Map();
-
-    for (const driver of driverStandings) {
-      const key = driver.teamName;
-      if (!constructorMap.has(key)) {
-        constructorMap.set(key, { teamName: driver.teamName, teamColor: driver.teamColor, points: 0, drivers: [] });
-      }
-      const c = constructorMap.get(key);
-      c.points += driver.points;
-      c.drivers.push(driver.abbreviation);
-    }
-
-    const standings = Array.from(constructorMap.values())
-      .sort((a, b) => b.points - a.points)
-      .map((c, i) => ({ ...c, position: i + 1 }));
-
+    const standings = aggregateConstructors(driverStandings);
     const result = { season: year, standings };
     const isComplete = scoredSessions === totalSessions && standings.length > 0;
     if (isComplete) setCached(cacheKey, result, 3600);
@@ -254,4 +256,30 @@ router.get('/constructors', async (req, res) => {
   }
 });
 
+async function warmUpStandings() {
+  const year         = new Date().getFullYear();
+  const driversKey   = `standings_drivers_${year}`;
+  const constructorsKey = `standings_constructors_${year}`;
+  if (getCached(driversKey) && getCached(constructorsKey)) return;
+  console.log('[warmup] building standings...');
+  try {
+    const { standings: driverStandings, scoredSessions, totalSessions } = await buildDriverStandings(year);
+    const isComplete = scoredSessions === totalSessions && driverStandings.length > 0;
+
+    const driversResult = { season: year, standings: driverStandings };
+    if (isComplete) setCached(driversKey, driversResult, 3600);
+    else memCache.set(driversKey, driversResult, 60);
+
+    const constructorStandings = aggregateConstructors(driverStandings);
+    const constructorsResult = { season: year, standings: constructorStandings };
+    if (isComplete) setCached(constructorsKey, constructorsResult, 3600);
+    else memCache.set(constructorsKey, constructorsResult, 60);
+
+    console.log(`[warmup] standings ready: ${scoredSessions}/${totalSessions} sessions, ${driverStandings.length} drivers`);
+  } catch (err) {
+    console.warn('[warmup] standings failed:', err.message);
+  }
+}
+
 module.exports = router;
+module.exports.warmUpStandings = warmUpStandings;

@@ -4,8 +4,10 @@ const cors = require('cors');
 const morgan = require('morgan');
 
 const scheduleRouter = require('./routes/schedule');
+const { warmUpSchedule } = scheduleRouter;
 const nextEventRouter = require('./routes/nextEvent');
 const standingsRouter = require('./routes/standings');
+const { warmUpStandings } = standingsRouter;
 const resultsRouter    = require('./routes/results');
 const liveStatusRouter  = require('./routes/liveStatus');
 const headlinesRouter   = require('./routes/headlines');
@@ -41,4 +43,8 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Pitwall backend running on port ${PORT}`);
+  // Pre-populate cache so the first user request is never the one waiting on OpenF1/Jolpica.
+  // These run in the background — failures are logged but don't crash the server.
+  warmUpSchedule();
+  warmUpStandings();
 });

@@ -4,7 +4,7 @@ const BASE_URL = process.env.API_BASE_URL || 'https://api.openf1.org/v1';
 
 const client = axios.create({
   baseURL: BASE_URL,
-  timeout: 30000,
+  timeout: 8000,
   headers: { 'Accept': 'application/json' },
 });
 

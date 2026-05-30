@@ -26,7 +26,8 @@ export function useDriverStandings() {
       refreshInterval: 300_000,
       revalidateOnFocus: false,
       revalidateOnMount: true,
-      keepPreviousData: true,
+      keepPreviousData: false,
+      dedupingInterval: 0,
       fallbackData: { season: 0, standings: [] },
     }
   );
@@ -41,7 +42,8 @@ export function useConstructorStandings() {
       refreshInterval: 300_000,
       revalidateOnFocus: false,
       revalidateOnMount: true,
-      keepPreviousData: true,
+      keepPreviousData: false,
+      dedupingInterval: 0,
       fallbackData: { season: 0, standings: [] },
     }
   );
