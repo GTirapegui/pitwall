@@ -13,6 +13,7 @@ import { useTimezone, formatInTz } from '@/hooks/useTimezone';
 import { useLiveStatus } from '@/hooks/useLiveStatus';
 import { useLiveData, LiveDriver } from '@/hooks/useLiveData';
 import { useI18n } from '@/context/I18nContext';
+import F1Loader from '@/components/ui/F1Loader';
 
 const A9  = 'Archivo_900Black';
 const A8  = 'Archivo_800ExtraBold';
@@ -299,8 +300,8 @@ export default function LiveScreen() {
       {/* Tower */}
       <View style={[s.tower,{backgroundColor:C.surface,borderColor:C.line}]}>
         {standings.length === 0 ? (
-          <View style={{padding:24,alignItems:'center'}}>
-            <Text style={{fontFamily:SM,fontSize:11,color:C.muted}}>Cargando datos…</Text>
+          <View style={{height:220}}>
+            <F1Loader />
           </View>
         ) : (
           standings.map((d, i) => (

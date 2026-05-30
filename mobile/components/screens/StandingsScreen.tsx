@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useColors } from '@/hooks/useColors';
 import { useDriverStandings, useConstructorStandings } from '@/hooks/useStandings';
 import { useI18n } from '@/context/I18nContext';
+import F1Loader from '@/components/ui/F1Loader';
 import { DRIVER_CODES } from '@/constants/flags';
 import { TEAM } from '@/constants/colors';
 
@@ -74,6 +75,7 @@ function DriverRow({
   driver: any; pos: number; maxPts: number;
 }) {
   const C = useColors();
+  const { t } = useI18n();
   const isLeader = pos === 0;
   const tc = TEAM[driver.teamName as keyof typeof TEAM] ?? '#8A8A8E';
   const flagCode = DRIVER_CODES[driver.abbreviation] ?? 'un';
@@ -164,6 +166,7 @@ function ConstructorRow({
   ctor: any; pos: number; maxPts: number;
 }) {
   const C = useColors();
+  const { t } = useI18n();
   const isLeader = pos === 0;
   const tc = TEAM[ctor.teamName as keyof typeof TEAM] ?? '#8A8A8E';
   const barPct = maxPts > 0 ? Math.max(3, (ctor.points / maxPts) * 100) : 3;
@@ -250,6 +253,10 @@ export default function StandingsScreen() {
   const isLoading = tab === 'drv' ? drvLoading : conLoading;
   const title = tab === 'drv' ? t('standings.driverChampionship') : t('standings.constructorChampionship');
 
+  if (isLoading) {
+    return <F1Loader label={t('standings.title')} />;
+  }
+
   return (
     <ScrollView
       style={[s.scroll, { backgroundColor: C.paper }]}
@@ -267,11 +274,7 @@ export default function StandingsScreen() {
 
       {/* Board */}
       <View style={[s.board, { backgroundColor: C.surface, borderColor: C.line }]}>
-        {isLoading ? (
-          <View style={s.empty}>
-            <Text style={[s.emptyTxt, { color: C.muted }]}>Cargando…</Text>
-          </View>
-        ) : tab === 'drv' ? (
+        {tab === 'drv' ? (
           drivers.map((d, i) => (
             <DriverRow key={d.driverNumber ?? i} driver={d} pos={i} maxPts={maxDrv} />
           ))
@@ -306,8 +309,6 @@ const s = StyleSheet.create({
 
   // Board card
   board:  { borderRadius: 14, borderWidth: 1, overflow: 'hidden' },
-  empty:  { padding: 32, alignItems: 'center' },
-  emptyTxt:{ fontFamily: SM, fontSize: 12 },
 
   // Row — .row.d: grid 30px 30px 1fr auto, gap 13, padding 14, radius 12
   row: {

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Pitwall · En Vivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --red:#E10600; --red-deep:#B00500; --gold:#C99A2E; --purple:#A855F7;
+  --paper:#E7E5DE; --surface:#FAF9F4; --surface-2:#F1EFE7;
+  --ink:#16161C; --ink-2:#46453E; --muted:#8C8A7F;
+  --line:rgba(20,20,28,.12); --line-2:rgba(20,20,28,.07); --dim:#C9C7BD;
+  --shadow:0 1px 0 rgba(255,255,255,.6) inset, 0 14px 34px -22px rgba(20,20,28,.5);
+  --grain:rgba(20,20,28,.045);
+}
+[data-theme="dark"]{
+  --paper:#0B0B0F; --surface:#16161D; --surface-2:#1D1D26;
+  --ink:#F3F1EA; --ink-2:#C9C7BD; --muted:#76757F;
+  --line:rgba(255,255,255,.11); --line-2:rgba(255,255,255,.055); --dim:#3A3A44;
+  --red:#FF2118; --red-deep:#FF4438; --gold:#F2BE4B; --purple:#C084FC;
+  --shadow:0 1px 0 rgba(255,255,255,.04) inset, 0 18px 46px -24px rgba(0,0,0,.9);
+  --grain:rgba(255,255,255,.03);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{font-family:'Archivo',system-ui,sans-serif;background:var(--paper);color:var(--ink);line-height:1.45;min-height:100vh;
+  background-image:radial-gradient(var(--grain) 1px,transparent 1px);background-size:4px 4px;
+  transition:background-color .35s ease,color .35s ease;-webkit-font-smoothing:antialiased;}
+.mono{font-family:'Space Mono',monospace}
+button{font-family:inherit;cursor:pointer;color:inherit;border:none;background:none}
+a{text-decoration:none;color:inherit}
+
+.topbar{position:sticky;top:0;z-index:40;display:flex;align-items:center;justify-content:space-between;
+  padding:16px clamp(16px,5vw,28px);background:color-mix(in srgb,var(--paper) 86%,transparent);
+  backdrop-filter:blur(14px) saturate(1.2);-webkit-backdrop-filter:blur(14px) saturate(1.2);border-bottom:1px solid var(--line);}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-tab{width:6px;height:24px;background:var(--red);border-radius:1px;box-shadow:0 0 14px -2px var(--red)}
+.brand-name{font-size:22px;font-weight:900;letter-spacing:.04em}
+.topbar-right{display:flex;align-items:center;gap:14px}
+.loc{font-size:12px;letter-spacing:.2em;color:var(--muted);font-weight:700}
+.loc b{color:var(--gold);font-weight:700}
+.theme-toggle{width:40px;height:40px;border-radius:999px;border:1px solid var(--line);display:grid;place-items:center;background:var(--surface);transition:.25s}
+.theme-toggle:hover{border-color:var(--ink-2);transform:translateY(-1px)}
+.theme-toggle svg{width:18px;height:18px;stroke:var(--ink);fill:none;stroke-width:2}
+.theme-toggle .i-moon{display:none}
+[data-theme="dark"] .theme-toggle .i-sun{display:none}
+[data-theme="dark"] .theme-toggle .i-moon{display:block}
+
+.app{max-width:600px;margin:0 auto;padding:clamp(16px,4vw,22px) clamp(14px,5vw,20px) 124px;display:flex;flex-direction:column;gap:16px}
+
+/* ===== STATUS HERO ===== */
+.live-hero{position:relative;overflow:hidden;border-radius:18px;color:#F3F1EA;
+  background:linear-gradient(160deg,#1a1a22 0%,#0c0c11 75%);border:1px solid rgba(255,255,255,.08);
+  padding:18px 18px 16px;box-shadow:0 22px 54px -30px rgba(225,6,0,.5),0 8px 26px -18px rgba(0,0,0,.7)}
+.live-hero::after{content:"";position:absolute;inset:0;opacity:.5;pointer-events:none;
+  background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:5px 5px;
+  -webkit-mask-image:linear-gradient(160deg,#000,transparent 65%);mask-image:linear-gradient(160deg,#000,transparent 65%)}
+.live-hero>*{position:relative;z-index:1}
+.lh-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:15px}
+.live-badge{display:inline-flex;align-items:center;gap:8px;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.2em;color:#fff;background:var(--red);padding:6px 11px 5px;border-radius:999px;animation:pulseRing 2s ease-out infinite}
+@keyframes pulseRing{0%{box-shadow:0 0 0 0 rgba(225,6,0,.55)}70%{box-shadow:0 0 0 12px rgba(225,6,0,0)}100%{box-shadow:0 0 0 0 rgba(225,6,0,0)}}
+.live-dot{width:8px;height:8px;border-radius:999px;background:#fff;position:relative}
+.live-dot::after{content:"";position:absolute;inset:-4px;border-radius:999px;border:1.5px solid rgba(255,255,255,.7);animation:ping 2s ease-out infinite}
+@keyframes ping{0%{transform:scale(.5);opacity:.9}80%,100%{transform:scale(1.7);opacity:0}}
+.flag-status{font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.16em;padding:5px 10px;border-radius:7px;display:inline-flex;align-items:center;gap:7px}
+.flag-status.green{color:#36D07B;border:1px solid rgba(54,208,123,.4);background:rgba(54,208,123,.08)}
+.flag-status .fl-dot{width:8px;height:8px;border-radius:2px;background:#36D07B}
+.lh-gp{font-size:26px;font-weight:900;text-transform:uppercase;letter-spacing:-.015em;line-height:.95}
+.lh-circuit{font-family:'Space Mono',monospace;font-size:11px;color:rgba(243,241,234,.55);margin-top:5px}
+.lap-wrap{margin-top:16px}
+.lap-row{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
+.lap-row .lab{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.2em;color:rgba(243,241,234,.5)}
+.lap-row .val{font-family:'Space Mono',monospace;font-size:13px;font-weight:700}
+.lap-row .val b{font-size:20px;font-weight:900}
+.lap-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden}
+.lap-bar span{display:block;height:100%;background:linear-gradient(90deg,var(--red),#ff7a32);border-radius:3px;transition:width .6s ease}
+.cond{display:flex;flex-wrap:wrap;gap:7px;margin-top:15px}
+.cond span{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.08em;color:rgba(243,241,234,.7);background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:7px;padding:5px 9px}
+.cond span b{color:#fff}
+
+/* ===== FASTEST LAP BANNER ===== */
+.vr{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 15px;box-shadow:var(--shadow)}
+.vr .vr-tag{font-family:'Space Mono',monospace;font-size:9px;font-weight:700;letter-spacing:.14em;color:#fff;background:var(--purple);padding:4px 8px;border-radius:6px}
+.vr .vr-drv{font-size:15px;font-weight:800;text-transform:uppercase}
+.vr .vr-time{margin-left:auto;font-family:'Space Mono',monospace;font-size:15px;font-weight:700;color:var(--purple)}
+
+/* ===== TIMING TOWER ===== */
+.tower-head{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 0;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:.18em;color:var(--muted);font-weight:700}
+.tower{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+.lt-row{position:relative;display:grid;grid-template-columns:34px 5px 1fr auto;align-items:center;gap:11px;padding:11px 14px 11px 10px}
+.lt-row+.lt-row{border-top:1px solid var(--line-2)}
+.lt-row.fav{background:color-mix(in srgb,var(--red) 7%,var(--surface))}
+.lt-row.fav::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--red)}
+.lt-pos{display:flex;flex-direction:column;align-items:center;gap:2px}
+.lt-pos b{font-family:'Space Mono',monospace;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.chg{font-family:'Space Mono',monospace;font-size:8px;font-weight:700;display:flex;align-items:center;gap:1px;line-height:1}
+.chg.up{color:#36D07B}.chg.down{color:var(--red)}.chg.same{color:var(--muted)}
+.lt-bar{width:5px;height:34px;border-radius:3px}
+.lt-mid{min-width:0}
+.lt-drv{display:flex;align-items:baseline;gap:8px}
+.lt-drv b{font-size:17px;font-weight:800;letter-spacing:.01em}
+.lt-drv span{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lt-meta{display:flex;align-items:center;gap:8px;margin-top:6px}
+.tyre{display:inline-flex;align-items:center;gap:5px;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;color:var(--ink-2)}
+.tyre i{width:15px;height:15px;border-radius:999px;border:2px solid;display:grid;place-items:center;font-size:7px}
+.tyre .age{color:var(--muted);font-weight:400}
+.drs{font-family:'Space Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:.06em;padding:2px 6px;border-radius:5px;border:1px solid var(--line);color:var(--muted)}
+.drs.on{color:#36D07B;border-color:rgba(54,208,123,.45);background:rgba(54,208,123,.08)}
+.pit{font-family:'Space Mono',monospace;font-size:8.5px;font-weight:700;letter-spacing:.08em;padding:2px 6px;border-radius:5px;background:var(--gold);color:#fff}
+.lt-time{text-align:right}
+.lt-gap{font-family:'Space Mono',monospace;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+.lt-gap.leader{color:var(--red)}
+.lt-last{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);margin-top:4px;font-variant-numeric:tabular-nums}
+.lt-last.purple{color:var(--purple);font-weight:700}
+
+.disc{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:.14em;color:var(--muted);text-align:center;margin-top:4px}
+
+/* NAV (5) */
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;justify-content:center;padding:0 10px calc(12px + env(safe-area-inset-bottom)) 10px;pointer-events:none}
+.nav-inner{pointer-events:auto;width:100%;max-width:520px;display:grid;grid-template-columns:repeat(5,1fr);
+  background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(18px) saturate(1.3);-webkit-backdrop-filter:blur(18px) saturate(1.3);
+  border:1px solid var(--line);border-radius:20px;box-shadow:0 18px 40px -18px rgba(0,0,0,.45),0 2px 0 rgba(255,255,255,.04) inset;overflow:hidden}
+.nav-item{position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:13px 2px 12px;color:var(--muted);transition:color .2s}
+.nav-item svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.nav-item span{font-family:'Space Mono',monospace;font-size:8.5px;letter-spacing:.08em;font-weight:700}
+.nav-item:hover{color:var(--ink-2)}
+.nav-item.active{color:var(--red)}
+.nav-item.active::before{content:"";position:absolute;top:0;left:50%;transform:translateX(-50%);width:24px;height:3px;background:var(--red);border-radius:0 0 3px 3px;box-shadow:0 0 10px var(--red)}
+.live-pip{position:absolute;top:9px;left:calc(50% + 8px);width:6px;height:6px;border-radius:999px;background:var(--red);animation:pulseRing 1.8s ease-out infinite}
+
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+<link rel="stylesheet" href="pitwall-platform.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-tab"></span><span class="brand-name">PITWALL</span></div>
+  <div class="topbar-right">
+    <span class="loc mono">SANTIAGO <b>2026</b></span>
+    <button class="theme-toggle" id="themeBtn" aria-label="Cambiar tema">
+      <svg class="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      <svg class="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="app">
+
+  <!-- STATUS HERO -->
+  <section class="live-hero">
+    <div class="lh-top">
+      <span class="live-badge"><span class="live-dot"></span>EN VIVO</span>
+      <span class="flag-status green"><span class="fl-dot"></span>PISTA VERDE</span>
+    </div>
+    <div class="lh-gp">Gran Premio de Austria</div>
+    <div class="lh-circuit">Red Bull Ring · Spielberg · Vuelta de carrera</div>
+    <div class="lap-wrap">
+      <div class="lap-row"><span class="lab">VUELTA</span><span class="val"><b id="lapNow">34</b> / 71</span></div>
+      <div class="lap-bar"><span id="lapBar" style="width:48%"></span></div>
+    </div>
+    <div class="cond">
+      <span>PISTA <b>41°</b></span>
+      <span>AIRE <b>24°</b></span>
+      <span><b>SECO</b></span>
+      <span>DRS <b>ACTIVO</b></span>
+      <span>LÍDER <b id="leaderTag">VERSTAPPEN</b></span>
+    </div>
+  </section>
+
+  <!-- FASTEST LAP -->
+  <div class="vr">
+    <span class="vr-tag">VUELTA RÁPIDA</span>
+    <span class="vr-drv" id="flDrv">Norris</span>
+    <span class="vr-time" id="flTime">1:06.980</span>
+  </div>
+
+  <!-- TOWER -->
+  <div class="tower-head"><span>CLASIFICACIÓN EN PISTA</span><span>INT. AL LÍDER</span></div>
+  <div class="tower" id="tower"></div>
+  <p class="disc">DATOS SIMULADOS · DEMOSTRACIÓN PITWALL</p>
+
+</main>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a class="nav-item" href="Pitwall Home.html">
+      <svg viewBox="0 0 24 24"><path d="M4 15a8 8 0 0 1 16 0"/><path d="M12 15l4.2-4.6"/><circle cx="12" cy="15" r="1.4" fill="currentColor" stroke="none"/><path d="M3 19h18"/></svg>
+      <span>INICIO</span>
+    </a>
+    <a class="nav-item" href="Pitwall Calendario.html">
+      <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3.5v3M16 3.5v3"/><circle cx="8" cy="13.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="13.5" r="1" fill="currentColor" stroke="none"/><circle cx="16" cy="13.5" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>CALENDARIO</span>
+    </a>
+    <a class="nav-item" href="Pitwall Posiciones.html">
+      <svg viewBox="0 0 24 24"><path d="M5 20V11M12 20V4M19 20v-6"/><path d="M3 20h18"/></svg>
+      <span>POSICIONES</span>
+    </a>
+    <a class="nav-item" href="Pitwall Resultados.html">
+      <svg viewBox="0 0 24 24"><path d="M7 4h10v3a5 5 0 0 1-10 0z"/><path d="M7 5H4.5v1.5A2.5 2.5 0 0 0 7 9M17 5h2.5v1.5A2.5 2.5 0 0 1 17 9"/><path d="M12 12v3M9 20h6M10 20l.5-3h3l.5 3"/></svg>
+      <span>RESULTADOS</span>
+    </a>
+    <a class="nav-item active" href="#">
+      <span class="live-pip"></span>
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M5 5a9.5 9.5 0 0 0 0 14M19 5a9.5 9.5 0 0 1 0 14"/></svg>
+      <span>EN VIVO</span>
+    </a>
+  </div>
+</nav>
+
+<script>
+/* tema */
+(function(){
+  var root=document.documentElement, btn=document.getElementById('themeBtn');
+  try{var s=localStorage.getItem('pitwall-theme'); if(s) root.setAttribute('data-theme',s);}catch(e){}
+  btn.addEventListener('click',function(){
+    var n=root.getAttribute('data-theme')==='dark'?'light':'dark';
+    root.setAttribute('data-theme',n);try{localStorage.setItem('pitwall-theme',n);}catch(e){}
+  });
+})();
+
+var TEAMS={mer:'#00D7B6',fer:'#E8002D',mcl:'#FF8000',rbr:'#3671C6',alp:'#0093CC',rb:'#6692FF',haa:'#9CA3AF',wil:'#1868DB',aud:'#BB0A30'};
+var TYRE={S:{c:'#E8002D'},M:{c:'#F2C94C'},H:{c:'#cfcfcf'}};
+
+/* orden de carrera (datos simulados) */
+var RACE=[
+  {code:'VER',name:'Verstappen',team:'rbr',chg:0, tyre:'M',age:12,gap:0,    last:'1:07.124',drs:false},
+  {code:'NOR',name:'Norris',    team:'mcl',chg:1, tyre:'M',age:10,gap:2.4,  last:'1:06.980',drs:true, fl:true},
+  {code:'LEC',name:'Leclerc',   team:'fer',chg:-1,tyre:'H',age:20,gap:5.1,  last:'1:07.512',drs:true},
+  {code:'ANT',name:'Antonelli', team:'mer',chg:2, tyre:'M',age:9, gap:8.7,  last:'1:07.330'},
+  {code:'PIA',name:'Piastri',   team:'mcl',chg:0, tyre:'M',age:11,gap:11.2, last:'1:07.410'},
+  {code:'RUS',name:'Russell',   team:'mer',chg:-1,tyre:'H',age:18,gap:14.0, last:'1:07.690'},
+  {code:'HAM',name:'Hamilton',  team:'fer',chg:1, tyre:'M',age:8, gap:18.6, last:'1:07.250'},
+  {code:'GAS',name:'Gasly',     team:'alp',chg:0, tyre:'H',age:22,gap:24.3, last:'1:08.010'},
+  {code:'COL',name:'Colapinto', team:'alp',chg:3, tyre:'M',age:7, gap:28.9, last:'1:07.880'},
+  {code:'BEA',name:'Bearman',   team:'haa',chg:-2,tyre:'S',age:3, gap:33.1, last:'1:07.560'},
+  {code:'HAD',name:'Hadjar',    team:'rbr',chg:0, tyre:'H',age:24,gap:38.5, last:'1:08.220',pit:true},
+  {code:'SAI',name:'Sainz',     team:'wil',chg:1, tyre:'M',age:14,gap:42.7, last:'1:08.090'}
+];
+
+/* piloto favorito (de Inicio) */
+var FAVCODE=(function(){
+  var map={ant:'VER'};/* fallback */
+  var ids={ant:'ANT',rus:'RUS',lec:'LEC',ham:'HAM',nor:'NOR',pia:'PIA',ver:'VER',gas:'GAS',bea:'BEA',haj:'HAD',col:'COL',sai:'SAI',bor:'BOR'};
+  try{return ids[localStorage.getItem('pitwall-fav')]||'COL';}catch(e){return 'COL';}
+})();
+
+function gapTxt(g){return g===0?'LÍDER':'+'+g.toFixed(1);}
+function chgMarkup(c){
+  if(c>0)return '<span class="chg up">▲'+c+'</span>';
+  if(c<0)return '<span class="chg down">▼'+(-c)+'</span>';
+  return '<span class="chg same">–</span>';
+}
+function row(d,i){
+  var tc=TEAMS[d.team], ty=TYRE[d.tyre];
+  var meta='<span class="tyre"><i style="border-color:'+ty.c+';color:'+ty.c+'">'+d.tyre+'</i><span class="age">'+d.age+'v</span></span>';
+  meta+= d.pit ? '<span class="pit">BOX</span>' : '<span class="drs'+(d.drs?' on':'')+'">DRS</span>';
+  return '<div class="lt-row'+(d.code===FAVCODE?' fav':'')+'" data-i="'+i+'">'+
+    '<div class="lt-pos"><b>'+String(i+1).padStart(2,'0')+'</b>'+chgMarkup(d.chg)+'</div>'+
+    '<div class="lt-bar" style="background:'+tc+'"></div>'+
+    '<div class="lt-mid">'+
+      '<div class="lt-drv"><b>'+d.code+'</b><span>'+d.name+'</span></div>'+
+      '<div class="lt-meta">'+meta+'</div>'+
+    '</div>'+
+    '<div class="lt-time">'+
+      '<div class="lt-gap'+(d.gap===0?' leader':'')+'">'+gapTxt(d.gap)+'</div>'+
+      '<div class="lt-last'+(d.fl?' purple':'')+'" data-last>'+d.last+'</div>'+
+    '</div>'+
+  '</div>';
+}
+document.getElementById('tower').innerHTML=RACE.map(row).join('');
+
+/* ===== Simulación en vivo ===== */
+(function(){
+  var lap=34, total=71, tick=0;
+  var lapEl=document.getElementById('lapNow'), barEl=document.getElementById('lapBar');
+  var lastEls=[].slice.call(document.querySelectorAll('[data-last]'));
+  function fmt(t){ // t en segundos -> m:ss.mmm
+    var m=Math.floor(t/60), s=(t-m*60);
+    return m+':'+(s<10?'0':'')+s.toFixed(3);
+  }
+  function base(str){var p=str.split(':');return parseInt(p[0])*60+parseFloat(p[1]);}
+  var bases=RACE.map(function(d){return base(d.last);});
+  setInterval(function(){
+    tick++;
+    /* jitter tiempos de vuelta */
+    RACE.forEach(function(d,i){
+      if(d.pit)return;
+      var jit=(Math.random()-0.5)*0.35;
+      var t=bases[i]+jit;
+      lastEls[i].textContent=fmt(t);
+    });
+    /* avanzar vuelta cada ~4 ticks */
+    if(tick%4===0 && lap<total){
+      lap++;
+      lapEl.textContent=lap;
+      barEl.style.width=Math.round(lap/total*100)+'%';
+    }
+  },2200);
+})();
+</script>
+<script src="pitwall-platform.js"></script>
+</body>
+</html>

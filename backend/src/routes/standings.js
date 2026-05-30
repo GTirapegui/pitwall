@@ -42,58 +42,86 @@ const POINT_CORRECTIONS = {
   },
 };
 
+// 3-layer cache lookup: memory → file → null
+function getCached(key) {
+  return memCache.get(key) || fileCache.get(key) || null;
+}
+
+// Save to both caches; file cache is the persistent fallback across server restarts.
+// Use a short file TTL (4h) so stale standings don't outlive a race weekend.
+function setCached(key, value, memTtl, fileTtl = 14400) {
+  memCache.set(key, value, memTtl);
+  fileCache.set(key, value, fileTtl);
+}
+
+// Timeout wrapper — rejects after ms milliseconds
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms)),
+  ]);
+}
+
+// In-flight deduplication: if two requests hit the endpoint simultaneously (e.g. /drivers
+// and /constructors both call buildDriverStandings), they share a single computation
+// instead of firing duplicate OpenF1 requests and overwriting each other's cache.
+const inFlight = new Map(); // year → Promise<result>
+
 async function buildDriverStandings(year) {
+  if (inFlight.has(year)) return inFlight.get(year);
+  const promise = _buildDriverStandings(year).finally(() => inFlight.delete(year));
+  inFlight.set(year, promise);
+  return promise;
+}
+
+async function _buildDriverStandings(year) {
   const now = new Date();
 
-  // Use filtered endpoint — fetch only Race-type sessions for the year.
-  // Cache separately so drivers and constructors endpoints share the same fetch.
-  const sessionsKey = `race_sessions_${year}`;
-  const raceSessions = getCached(sessionsKey)
-    || await get('/sessions', { session_type: 'Race', year }).then(d => {
-      setCached(sessionsKey, d, 3600);
-      return d;
-    });
+  // Fetch ALL sessions for the year (no session_type filter) — sprint races have a
+  // different session_type in OpenF1 and would be missed with session_type:'Race'.
+  const sessionsKey = `all_sessions_${year}`;
+  let allSessions = getCached(sessionsKey);
+  if (!allSessions) {
+    allSessions = await get('/sessions', { year });
+    memCache.set(sessionsKey, allSessions, 1800); // 30 min, memory-only (hot path)
+  }
 
-  const completedRaces = raceSessions.filter(
+  const completedRaces = allSessions.filter(
     s => s.session_name === 'Race' && !s.is_cancelled && new Date(s.date_end) < now
   );
-  const completedSprints = raceSessions.filter(
+  const completedSprints = allSessions.filter(
     s => s.session_name === 'Sprint' && !s.is_cancelled && new Date(s.date_end) < now
   );
 
   const driverPoints = new Map();
   const driverInfo   = new Map();
 
-  // Stagger 1500ms between sessions — keeps request rate under 2/s to avoid OpenF1 rate limits.
-  // Each session fires position + drivers in parallel (2 concurrent). get() retries 429s automatically.
-  const STAGGER_MS = 2000; // 2s between sessions → ~14s for 8 sessions, stays within rate limits
+  // Stagger 1500ms between sessions to stay under OpenF1's rate limit (~2 req/s).
+  // Each session fires position + drivers in parallel (2 concurrent).
+  const STAGGER_MS = 1500;
 
-  const allSessions = [
+  const sessionList = [
     ...completedRaces.map(s   => ({ ...s, _type: 'race'   })),
     ...completedSprints.map(s => ({ ...s, _type: 'sprint' })),
   ];
 
-  // 2 requests per session (position + drivers), staggered to avoid rate limiting
   const allResults = await Promise.allSettled(
-    allSessions.map((session, i) =>
+    sessionList.map((session, i) =>
       new Promise(r => setTimeout(r, i * STAGGER_MS))
         .then(() => Promise.all([
           get('/position', { session_key: session.session_key }),
           get('/drivers',  { session_key: session.session_key }),
         ]))
-        .then(([positions, drivers]) => ({
-          sessionKey: session.session_key,
-          positions, drivers,
-        }))
+        .then(([positions, drivers]) => ({ sessionKey: session.session_key, positions, drivers }))
     )
   );
 
-  const raceData   = allResults.filter((_, i) => allSessions[i]._type === 'race');
-  const sprintData = allResults.filter((_, i) => allSessions[i]._type === 'sprint');
+  const raceResults   = allResults.filter((_, i) => sessionList[i]._type === 'race');
+  const sprintResults = allResults.filter((_, i) => sessionList[i]._type === 'sprint');
 
   let scoredCount = 0;
 
-  const scoreResults = (results, pointsSystem) => {
+  function scoreResults(results, pointsSystem) {
     for (const result of results) {
       if (result.status !== 'fulfilled') {
         console.warn('[standings] session failed:', result.reason?.message);
@@ -116,24 +144,27 @@ async function buildDriverStandings(year) {
         }
       }
 
-      // Final position = last recorded entry per driver in this session
+      // Take the position recorded at the latest timestamp per driver.
+      // OpenF1 is usually date-ASC but this is defensive against ordering variations.
       const finalPos = new Map();
       for (const pos of positions) {
-        finalPos.set(pos.driver_number, pos.position);
+        const current = finalPos.get(pos.driver_number);
+        if (!current || (pos.date && (!current.date || pos.date > current.date))) {
+          finalPos.set(pos.driver_number, { position: pos.position, date: pos.date || '' });
+        }
       }
 
-      for (const [dNum, pos] of finalPos) {
+      for (const [dNum, { position: pos }] of finalPos) {
         if (!driverPoints.has(dNum)) driverPoints.set(dNum, 0);
         if (pos >= 1 && pos <= pointsSystem.length) {
           driverPoints.set(dNum, driverPoints.get(dNum) + pointsSystem[pos - 1]);
         }
       }
-
     }
-  };
+  }
 
-  scoreResults(raceData,   RACE_POINTS);
-  scoreResults(sprintData, SPRINT_POINTS);
+  scoreResults(raceResults,   RACE_POINTS);
+  scoreResults(sprintResults, SPRINT_POINTS);
 
   // Apply manual corrections for stewards' post-race penalties
   const corrections = POINT_CORRECTIONS[year] || {};
@@ -155,26 +186,7 @@ async function buildDriverStandings(year) {
     .sort((a, b) => b.points - a.points)
     .map((d, i) => ({ ...d, position: i + 1 }));
 
-  return { standings, scoredSessions: scoredCount, totalSessions: allSessions.length };
-}
-
-// Timeout wrapper — rejects after ms milliseconds
-function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms)),
-  ]);
-}
-
-// 3-layer cache lookup: memory → file → null
-function getCached(key) {
-  return memCache.get(key) || fileCache.get(key) || null;
-}
-
-// Save to both caches; file cache persists across server restarts
-function setCached(key, value, memTtl, fileTtl = 86400) {
-  memCache.set(key, value, memTtl);
-  fileCache.set(key, value, fileTtl);
+  return { standings, scoredSessions: scoredCount, totalSessions: sessionList.length };
 }
 
 // GET /api/standings/drivers
@@ -186,16 +198,15 @@ router.get('/drivers', async (req, res) => {
   if (cached) return res.json(cached);
 
   try {
-    const { standings, scoredSessions, totalSessions } = await withTimeout(buildDriverStandings(year), 30000);
+    const { standings, scoredSessions, totalSessions } = await withTimeout(buildDriverStandings(year), 45000);
     const result = { season: year, standings };
     const isComplete = scoredSessions === totalSessions && standings.length > 0;
-    if (isComplete) setCached(cacheKey, result, 3600);   // full data → persist
-    else memCache.set(cacheKey, result, 30);              // partial → retry in 30s, no disk
+    if (isComplete) setCached(cacheKey, result, 3600);  // full data → 1h memory, 4h file
+    else memCache.set(cacheKey, result, 60);             // partial → retry in 60s, no disk
     console.log(`[standings/drivers] ${scoredSessions}/${totalSessions} sessions scored, cached=${isComplete}`);
     res.json(result);
   } catch (err) {
     console.error('[standings/drivers]', err.message);
-    // Fall back to stale file cache rather than returning an error
     const stale = fileCache.get(cacheKey);
     if (stale) return res.json(stale);
     res.status(502).json({ error: 'Failed to fetch driver standings', detail: err.message });
@@ -211,18 +222,15 @@ router.get('/constructors', async (req, res) => {
   if (cached) return res.json(cached);
 
   try {
-    const { standings: driverStandings, scoredSessions, totalSessions } = await withTimeout(buildDriverStandings(year), 30000);
-    const constructorMap  = new Map();
+    // Reuse the same buildDriverStandings call (deduped via inFlight map) to avoid
+    // firing duplicate OpenF1 requests when /drivers and /constructors are called together.
+    const { standings: driverStandings, scoredSessions, totalSessions } = await withTimeout(buildDriverStandings(year), 45000);
+    const constructorMap = new Map();
 
     for (const driver of driverStandings) {
       const key = driver.teamName;
       if (!constructorMap.has(key)) {
-        constructorMap.set(key, {
-          teamName:  driver.teamName,
-          teamColor: driver.teamColor,
-          points:    0,
-          drivers:   [],
-        });
+        constructorMap.set(key, { teamName: driver.teamName, teamColor: driver.teamColor, points: 0, drivers: [] });
       }
       const c = constructorMap.get(key);
       c.points += driver.points;
@@ -236,7 +244,7 @@ router.get('/constructors', async (req, res) => {
     const result = { season: year, standings };
     const isComplete = scoredSessions === totalSessions && standings.length > 0;
     if (isComplete) setCached(cacheKey, result, 3600);
-    else memCache.set(cacheKey, result, 30);
+    else memCache.set(cacheKey, result, 60);
     res.json(result);
   } catch (err) {
     console.error('[standings/constructors]', err.message);

@@ -45,7 +45,19 @@
       "Bash(npx expo *)",
       "Bash(npx tsc *)",
       "Bash(grep -v \"^$\")",
-      "Bash(grep -v \"//fonts.gstatic\")"
+      "Bash(grep -v \"//fonts.gstatic\")",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(eas build *)",
+      "Bash(eas build:view 989b2c9a-bf50-4df0-bc94-2c9d6ebd32bb)",
+      "WebFetch(domain:expo.dev)",
+      "Bash(eas build:download --id 69511ca9-984f-4aff-84a9-1bd865ba5d73 --output \"C:/Users/Gustavo/Desktop/pitwall/pitwall-preview.apk\")",
+      "Bash(eas build:download --help)",
+      "Bash(eas build:download --build-id 69511ca9-984f-4aff-84a9-1bd865ba5d73)",
+      "Bash(adb devices *)",
+      "PowerShell(adb devices *)",
+      "Bash(npm install *)"
     ]
   }
 }

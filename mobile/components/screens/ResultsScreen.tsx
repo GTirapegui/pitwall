@@ -5,12 +5,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, Image,
-  StyleSheet, ActivityIndicator, Platform,
+  StyleSheet, Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColors } from '@/hooks/useColors';
 import { useSchedule } from '@/hooks/useSchedule';
+import F1Loader from '@/components/ui/F1Loader';
 import { DRIVER_CODES, getCountryCode } from '@/constants/flags';
 import { TEAM } from '@/constants/colors';
 
@@ -287,7 +288,7 @@ export default function ResultsScreen() {
       {/* Content */}
       {loading ? (
         <View style={s.loader}>
-          <ActivityIndicator color={C.red} size="large" />
+          <F1Loader />
         </View>
       ) : results && p1 && p2 && p3 ? (
         <>

@@ -23,14 +23,52 @@ const DRIVER_FLAGS = {
 const POINTS_SYSTEM = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 
 // ── Shared builder — returns the full results object for a given session ───────
-async function buildResultsForSession(sessionKey, round, meeting, raceWeekends) {
+// meetingSessions: all sessions for the same meeting, used as fallback for driver lookup
+async function buildResultsForSession(sessionKey, round, meeting, raceWeekends, meetingSessions = []) {
   // All calls get .catch(() => []) so a single OpenF1 failure doesn't kill the whole response
-  const [positions, drivers, laps, intervals] = await Promise.all([
+  const [positions, laps, intervals] = await Promise.all([
     get('/position', { session_key: sessionKey }).catch(() => []),
-    get('/drivers',  { session_key: sessionKey }).catch(() => []),
     get('/laps',     { session_key: sessionKey }).catch(() => []),
     get('/intervals',{ session_key: sessionKey }).catch(() => []),
   ]);
+
+  // Fetch driver roster with a three-level fallback:
+  // 1. Race session itself
+  // 2. Other sessions from the same meeting (qualifying/practice share the same lineup)
+  // 3. session_key=latest — catches cases where the entire meeting has no data yet in OpenF1
+  let drivers = await get('/drivers', { session_key: sessionKey }).catch(() => []);
+
+  if (drivers.length === 0 && meetingSessions.length > 0) {
+    const SESSION_PRIORITY = { 'Qualifying': 0, 'Sprint Qualifying': 1, 'Sprint': 2,
+      'Practice 3': 3, 'Practice 2': 4, 'Practice 1': 5 };
+    const fallbacks = meetingSessions
+      .filter(s => s.session_key !== sessionKey)
+      .sort((a, b) => (SESSION_PRIORITY[a.session_name] ?? 99) - (SESSION_PRIORITY[b.session_name] ?? 99));
+    for (const sess of fallbacks) {
+      drivers = await get('/drivers', { session_key: sess.session_key }).catch(() => []);
+      if (drivers.length > 0) {
+        console.log(`[results] driver fallback: meeting session ${sess.session_key} (${sess.session_name})`);
+        break;
+      }
+    }
+  }
+
+  if (drivers.length === 0) {
+    // Last resort: fetch from the globally latest session OpenF1 has data for.
+    // Driver numbers/names are stable across a season so this gives correct identity info.
+    // Cache aggressively (6h) since the roster barely changes mid-season.
+    const latestKey = 'drivers_latest_roster';
+    drivers = cache.get(latestKey) || [];
+    if (drivers.length === 0) {
+      drivers = await get('/drivers', { session_key: 'latest' }).catch(() => []);
+      if (drivers.length > 0) {
+        cache.set(latestKey, drivers, 21600); // 6h
+        console.log(`[results] driver fallback: session_key=latest (${drivers.length} drivers)`);
+      }
+    } else {
+      console.log(`[results] driver fallback: cached latest roster`);
+    }
+  }
 
   const driverInfo = new Map();
   for (const d of drivers) {
@@ -103,6 +141,24 @@ async function buildResultsForSession(sessionKey, round, meeting, raceWeekends) 
   };
 }
 
+// ── Shared: load meetings + sessions for a year with 30-min cache ─────────────
+async function getYearData(year) {
+  const ck = `year_data_${year}`;
+  const hit = cache.get(ck);
+  if (hit) return hit;
+
+  const [meetings, sessions] = await Promise.all([
+    getMeetings(year).catch(() => []),
+    getSessions(year).catch(() => []),
+  ]);
+
+  if (!meetings.length && !sessions.length) return null;
+
+  const data = { meetings, sessions };
+  cache.set(ck, data, 1800); // 30 min
+  return data;
+}
+
 // GET /api/results/latest
 router.get('/latest', async (req, res) => {
   const year     = new Date().getFullYear();
@@ -111,7 +167,10 @@ router.get('/latest', async (req, res) => {
   if (cached) return res.json(cached);
 
   try {
-    const [meetings, sessions] = await Promise.all([getMeetings(year), getSessions(year)]);
+    const yearData = await getYearData(year);
+    if (!yearData) return res.status(503).json({ error: 'OpenF1 unavailable', results: null });
+
+    const { meetings, sessions } = yearData;
     const now = new Date();
 
     const completedRaces = sessions
@@ -121,20 +180,21 @@ router.get('/latest', async (req, res) => {
     if (completedRaces.length === 0)
       return res.json({ message: 'No completed races yet', results: null });
 
-    const lastRace    = completedRaces[0];
+    const lastRace     = completedRaces[0];
     const raceWeekends = meetings
       .filter(m => !m.meeting_name.toLowerCase().includes('testing'))
       .sort((a, b) => a.date_start.localeCompare(b.date_start));
-    const round   = raceWeekends.findIndex(m => m.meeting_key === lastRace.meeting_key) + 1;
-    const meeting = raceWeekends[round - 1] || {};
+    const round          = raceWeekends.findIndex(m => m.meeting_key === lastRace.meeting_key) + 1;
+    const meeting        = raceWeekends[round - 1] || {};
+    const meetingSessions = sessions.filter(s => s.meeting_key === lastRace.meeting_key);
 
-    const result = await buildResultsForSession(lastRace.session_key, round, meeting, raceWeekends);
+    const result = await buildResultsForSession(lastRace.session_key, round, meeting, raceWeekends, meetingSessions);
     if (!result) return res.json({ message: 'Race data not yet available from OpenF1', results: null });
     cache.set(cacheKey, result, 3600);
     res.json(result);
   } catch (err) {
     console.error('[results/latest]', err.message);
-    res.status(502).json({ error: 'Failed to fetch results', detail: err.message });
+    res.status(503).json({ error: 'Results temporarily unavailable', detail: err.message });
   }
 });
 
@@ -150,7 +210,10 @@ router.get('/:round', async (req, res) => {
   if (cached) return res.json(cached);
 
   try {
-    const [meetings, sessions] = await Promise.all([getMeetings(year), getSessions(year)]);
+    const yearData = await getYearData(year);
+    if (!yearData) return res.status(503).json({ error: 'OpenF1 unavailable', results: null });
+
+    const { meetings, sessions } = yearData;
     const now = new Date();
 
     const raceWeekends = meetings
@@ -168,8 +231,9 @@ router.get('/:round', async (req, res) => {
     if (!raceSession)
       return res.json({ round: roundNum, results: null, message: 'Race not yet completed' });
 
+    const meetingSessions = sessions.filter(s => s.meeting_key === meeting.meeting_key);
     const result = await buildResultsForSession(
-      raceSession.session_key, roundNum, meeting, raceWeekends
+      raceSession.session_key, roundNum, meeting, raceWeekends, meetingSessions
     );
     if (!result) return res.json({ round: roundNum, message: 'Race data not yet available from OpenF1', results: null });
     cache.set(cacheKey, result, 86400); // 24h — past race data never changes

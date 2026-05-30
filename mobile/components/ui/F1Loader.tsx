@@ -181,9 +181,8 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(225,6,0,0.25)',
   },
 
-  // Thick red line below the flag (finish line)
+  // Thick red line below the flag (finish line) — width set inline
   finishLine: {
-    width: GRID_W,
     height: 4,
     backgroundColor: '#E10600',
     borderBottomLeftRadius: 2,
