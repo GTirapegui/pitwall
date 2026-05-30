@@ -22,6 +22,16 @@ const DRIVER_FLAGS = {
 
 const POINTS_SYSTEM = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 
+// Driver fetch with per-session cache — past sessions never change so 24h TTL is safe.
+async function fetchDriversWithCache(sessionKey) {
+  const ck = `drivers_session_${sessionKey}`;
+  const hit = cache.get(ck);
+  if (hit) return hit;
+  const drivers = await get('/drivers', { session_key: sessionKey }).catch(() => []);
+  if (drivers.length > 0) cache.set(ck, drivers, 86400);
+  return drivers;
+}
+
 // ── Shared builder — returns the full results object for a given session ───────
 // meetingSessions: all sessions for the same meeting, used as fallback for driver lookup
 async function buildResultsForSession(sessionKey, round, meeting, raceWeekends, meetingSessions = []) {
@@ -32,11 +42,11 @@ async function buildResultsForSession(sessionKey, round, meeting, raceWeekends, 
     get('/intervals',{ session_key: sessionKey }).catch(() => []),
   ]);
 
-  // Fetch driver roster with a three-level fallback:
-  // 1. Race session itself
+  // Three-level driver fallback:
+  // 1. Race session itself (cached per session_key)
   // 2. Other sessions from the same meeting (qualifying/practice share the same lineup)
-  // 3. session_key=latest — catches cases where the entire meeting has no data yet in OpenF1
-  let drivers = await get('/drivers', { session_key: sessionKey }).catch(() => []);
+  // 3. session_key=latest — last resort when the entire meeting has no driver data yet
+  let drivers = await fetchDriversWithCache(sessionKey);
 
   if (drivers.length === 0 && meetingSessions.length > 0) {
     const SESSION_PRIORITY = { 'Qualifying': 0, 'Sprint Qualifying': 1, 'Sprint': 2,
@@ -45,7 +55,7 @@ async function buildResultsForSession(sessionKey, round, meeting, raceWeekends, 
       .filter(s => s.session_key !== sessionKey)
       .sort((a, b) => (SESSION_PRIORITY[a.session_name] ?? 99) - (SESSION_PRIORITY[b.session_name] ?? 99));
     for (const sess of fallbacks) {
-      drivers = await get('/drivers', { session_key: sess.session_key }).catch(() => []);
+      drivers = await fetchDriversWithCache(sess.session_key);
       if (drivers.length > 0) {
         console.log(`[results] driver fallback: meeting session ${sess.session_key} (${sess.session_name})`);
         break;
@@ -56,7 +66,6 @@ async function buildResultsForSession(sessionKey, round, meeting, raceWeekends, 
   if (drivers.length === 0) {
     // Last resort: fetch from the globally latest session OpenF1 has data for.
     // Driver numbers/names are stable across a season so this gives correct identity info.
-    // Cache aggressively (6h) since the roster barely changes mid-season.
     const latestKey = 'drivers_latest_roster';
     drivers = cache.get(latestKey) || [];
     if (drivers.length === 0) {
@@ -120,6 +129,14 @@ async function buildResultsForSession(sessionKey, round, meeting, raceWeekends, 
 
   const totalLaps = laps.length > 0 ? Math.max(...laps.map(l => l.lap_number || 0)) : null;
 
+  // Per-driver lap count — used to derive "+X laps" gap when interval data is absent
+  const driverLapCounts = new Map();
+  for (const lap of laps) {
+    const n = lap.lap_number || 0;
+    if (n > (driverLapCounts.get(lap.driver_number) || 0))
+      driverLapCounts.set(lap.driver_number, n);
+  }
+
   const finalGap = new Map();
   for (const iv of intervals) {
     if (iv.gap_to_leader !== null && iv.gap_to_leader !== undefined) {
@@ -140,8 +157,17 @@ async function buildResultsForSession(sessionKey, round, meeting, raceWeekends, 
       };
       const rawGap = finalGap.get(num);
       let gap = null;
-      if (pos !== 1 && rawGap !== undefined) {
-        gap = typeof rawGap === 'number' ? `+${rawGap.toFixed(3)}s` : String(rawGap);
+      if (pos !== 1) {
+        if (rawGap !== undefined && rawGap !== null) {
+          gap = typeof rawGap === 'number' ? `+${rawGap.toFixed(3)}s` : String(rawGap);
+        } else if (totalLaps !== null) {
+          // No interval data — derive gap from lap count
+          const dLaps = driverLapCounts.get(num) || 0;
+          const diff  = totalLaps - dLaps;
+          if (diff > 0)   gap = diff === 1 ? '+1 lap' : `+${diff} laps`;
+          else if (dLaps === 0) gap = 'DNF'; // no laps recorded: didn't start or very early retirement
+          // diff === 0 and dLaps > 0: finished on lead lap but no timing — gap stays null
+        }
       }
       return {
         ...info, position: pos,

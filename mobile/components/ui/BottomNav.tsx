@@ -95,8 +95,9 @@ function LivePip() {
 // ── Web tooltip ───────────────────────────────────────────────────────────────
 function WebTooltip({ visible, onHide }: { visible: boolean; onHide: () => void }) {
   const C = useColors();
+  const { t } = useI18n();
   useEffect(() => {
-    if (visible) { const t = setTimeout(onHide, 2000); return () => clearTimeout(t); }
+    if (visible) { const timer = setTimeout(onHide, 2000); return () => clearTimeout(timer); }
   }, [visible]);
   if (!visible) return null;
   return (

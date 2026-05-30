@@ -155,7 +155,7 @@ function ClassRow({
   const tc = TEAM[driver.teamName as keyof typeof TEAM] ?? '#8A8A8E';
   const flagCode = DRIVER_CODES[driver.abbreviation] ?? 'un';
   const pts = POINTS[pos - 1] ?? 0;
-  const gapStr = driver.gap ?? 'DNF';
+  const gapStr = driver.gap ?? '—';
 
   return (
     <View style={[
