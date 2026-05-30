@@ -212,7 +212,7 @@ router.get('/latest', async (req, res) => {
 
     const lastRace     = completedRaces[0];
     const raceWeekends = meetings
-      .filter(m => !m.meeting_name.toLowerCase().includes('testing'))
+      .filter(m => !m.meeting_name.toLowerCase().includes('test'))
       .sort((a, b) => a.date_start.localeCompare(b.date_start));
     const round          = raceWeekends.findIndex(m => m.meeting_key === lastRace.meeting_key) + 1;
     const meeting        = raceWeekends[round - 1] || {};
@@ -247,7 +247,7 @@ router.get('/:round', async (req, res) => {
     const now = new Date();
 
     const raceWeekends = meetings
-      .filter(m => !m.meeting_name.toLowerCase().includes('testing'))
+      .filter(m => !m.meeting_name.toLowerCase().includes('test'))
       .sort((a, b) => a.date_start.localeCompare(b.date_start));
 
     const meeting = raceWeekends[roundNum - 1];

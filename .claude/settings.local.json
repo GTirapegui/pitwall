@@ -57,7 +57,10 @@
       "Bash(eas build:download --build-id 69511ca9-984f-4aff-84a9-1bd865ba5d73)",
       "Bash(adb devices *)",
       "PowerShell(adb devices *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(eas whoami *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Gustavo\\\\Desktop\\\\pitwall\" -Force)",
+      "Bash(Select-Object Name, FullName)"
     ]
   }
 }

@@ -32,7 +32,7 @@ router.get('/', async (req, res) => {
 
     // Filter to race weekends only (exclude pre-season testing)
     const raceWeekends = meetings
-      .filter(m => !m.meeting_name.toLowerCase().includes('testing'))
+      .filter(m => !m.meeting_name.toLowerCase().includes('test'))
       .sort((a, b) => a.date_start.localeCompare(b.date_start))
       .map((m, i) => ({
         round: i + 1,

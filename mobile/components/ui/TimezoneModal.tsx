@@ -144,6 +144,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
   },
   sheet: {
+    flex: 1,
     borderTopLeftRadius: 14,
     borderTopRightRadius: 14,
     borderWidth: 1,
