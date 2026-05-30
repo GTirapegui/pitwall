@@ -2,7 +2,8 @@ const express = require('express');
 const router  = express.Router();
 const memCache = require('../cache/memoryCache');
 
-const BASE = `http://localhost:${process.env.PORT || 3001}`;
+// Self-call: use 127.0.0.1 which is more reliable than 'localhost' in containers
+const BASE = `http://127.0.0.1:${process.env.PORT || 3001}`;
 
 async function fetchLocal(path) {
   const res = await fetch(`${BASE}${path}`);
@@ -13,12 +14,15 @@ async function fetchLocal(path) {
 // Circuit adjectives for PREVIA headline
 const CIRCUIT_ADJ = {
   'Monte Carlo': 'técnicos y exigentes',
+  'Monaco':      'técnicos y exigentes',
   'Monza':       'rápidos del calendario',
   'Spa':         'míticos del mundo',
   'Silverstone': 'históricos de la F1',
   'Suzuka':      'desafiantes del calendario',
   'Interlagos':  'espectaculares del año',
   'Baku':        'imprevisibles del campeonato',
+  'Las Vegas':   'espectaculares del calendario',
+  'Jeddah':      'rápidos y nocturnos del año',
 };
 
 function circuitAdj(circuitShort) {
@@ -28,7 +32,6 @@ function circuitAdj(circuitShort) {
   return 'desafiantes del campeonato';
 }
 
-// Human-readable time-ago strings
 function timeAgo(date) {
   const diff = Date.now() - new Date(date).getTime();
   const h    = Math.floor(diff / 3_600_000);
@@ -43,69 +46,82 @@ function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + m
 
 // GET /api/headlines
 router.get('/', async (req, res) => {
-  const CACHE_KEY = 'headlines_v1';
-  const cached = memCache.get(CACHE_KEY);
-  if (cached) return res.json(cached);
-
   try {
-    const [results, driverSt, constrSt, nextEvt] = await Promise.all([
+    // Fetch next event first — its meetingKey drives the cache key so headlines
+    // automatically regenerate whenever the next GP changes.
+    const nextEvt = await fetchLocal('/api/next-event');
+    const eventSlot = nextEvt?.meetingKey ?? nextEvt?.round ?? 'generic';
+    const CACHE_KEY = `headlines_v3_${eventSlot}`;
+
+    const cached = memCache.get(CACHE_KEY);
+    if (cached) return res.json(cached);
+
+    // Fetch remaining data in parallel
+    const [results, driverSt, constrSt] = await Promise.all([
       fetchLocal('/api/results/latest'),
       fetchLocal('/api/standings/drivers'),
       fetchLocal('/api/standings/constructors'),
-      fetchLocal('/api/next-event'),
     ]);
 
     const headlines = [];
 
-    // ── 1. RESULTADO ──────────────────────────────────────────────────────────
+    // ── 1. RESULTADO del último GP ────────────────────────────────────────────
     if (results?.results?.length) {
-      const winner   = results.results[0];
-      const gp       = (results.meetingName || '').replace(' Grand Prix', '');
-      const drivers  = driverSt?.standings ?? [];
-      const leader   = drivers[0];
-      const second   = drivers[1];
-      const gap      = leader && second ? leader.points - second.points : 0;
+      const winner  = results.results[0];
+      const gp      = (results.meetingName || '').replace(' Grand Prix', '');
+      const drivers = driverSt?.standings ?? [];
+      const leader  = drivers[0];
+      const second  = drivers[1];
+      const gap     = leader && second ? leader.points - second.points : 0;
 
       let action = `suma ${winner.points} puntos importantes en el campeonato`;
       if (leader && winner.abbreviation === leader.abbreviation) {
         action = `extiende su ventaja a ${gap} puntos en el mundial`;
-      } else if (leader && winner.abbreviation === second?.abbreviation) {
+      } else if (second && winner.abbreviation === second.abbreviation) {
         action = `recorta a tan solo ${gap} puntos del líder`;
       }
 
       headlines.push({
-        tag: 'RESULTADOS',
+        tag:   'RESULTADOS',
         title: `${winner.firstName} ${winner.lastName} se impone en ${gp} y ${action}.`,
-        time: timeAgo(results.dateStart),
+        time:  timeAgo(results.dateStart),
       });
     }
 
-    // ── 2. CAMPEONATO PILOTOS ─────────────────────────────────────────────────
+    // ── 2. CAMPEONATO de pilotos ──────────────────────────────────────────────
     const drivers = driverSt?.standings ?? [];
     if (drivers.length >= 2) {
-      const p1   = drivers[0];
-      const p2   = drivers[1];
-      const gap  = p1.points - p2.points;
-      const rem  = nextEvt?.totalRounds && nextEvt?.round
-        ? nextEvt.totalRounds - (results?.round ?? 0)
+      const p1  = drivers[0];
+      const p2  = drivers[1];
+      const gap = p1.points - p2.points;
+      const rem = nextEvt?.totalRounds && nextEvt?.round
+        ? nextEvt.totalRounds - (nextEvt.round - 1)
         : '?';
 
       headlines.push({
-        tag: 'CAMPEONATO',
+        tag:   'CAMPEONATO',
         title: `${p1.lastName} lidera el mundial con ${p1.points} pts, +${gap} sobre ${p2.lastName} a ${rem} fechas del final.`,
-        time: `hace 1 día`,
+        time:  'hace 1 día',
       });
     }
 
-    // ── 3. PREVIA PRÓXIMA CARRERA ─────────────────────────────────────────────
+    // ── 3. PREVIA próxima carrera ─────────────────────────────────────────────
     if (nextEvt?.meetingName && nextEvt.mode !== 'lastRace') {
       const gp      = (nextEvt.meetingName || '').replace(' Grand Prix', '');
       const circuit = nextEvt.circuitShortName || '';
       const adj     = circuitAdj(circuit);
+      const raceDate = nextEvt.sessions?.find(s => s.sessionName === 'Race')?.dateStart;
+      const daysUntil = raceDate
+        ? Math.ceil((new Date(raceDate).getTime() - Date.now()) / 86_400_000)
+        : null;
+      const when = daysUntil != null && daysUntil > 0
+        ? `en ${daysUntil} día${daysUntil !== 1 ? 's' : ''}`
+        : 'este fin de semana';
+
       headlines.push({
-        tag: 'PREVIA',
-        title: `El pelotón se prepara para ${gp}: ${circuit}, uno de los trazados más ${adj}.`,
-        time: `hace ${rand(3, 8)} h`,
+        tag:   'PREVIA',
+        title: `El pelotón llega ${when} a ${gp}: ${circuit}, uno de los trazados más ${adj}.`,
+        time:  `hace ${rand(3, 8)} h`,
       });
     }
 
@@ -116,33 +132,30 @@ router.get('/', async (req, res) => {
       const c2  = constrs[1];
       const gap = c1.points - c2.points;
       headlines.push({
-        tag: 'TÉCNICA',
+        tag:   'TÉCNICA',
         title: `${c1.teamName} domina los constructores con ${c1.points} pts, ${gap} más que ${c2.teamName}.`,
-        time: `hace ${rand(4, 14)} h`,
+        time:  `hace ${rand(4, 14)} h`,
       });
     }
 
-    // ── 5. PILOTO DESTACADO ───────────────────────────────────────────────────
+    // ── 5. PILOTO destacado ───────────────────────────────────────────────────
     if (results?.results?.length && drivers.length) {
-      const winner  = results.results[0];
-      // Count wins: approximate using pts vs rank — simply highlight the leader
       const leader  = drivers[0];
       const winsEst = Math.floor(leader.points / 25);
       const nth     = winsEst === 1 ? '1ª' : `${winsEst}ª`;
       headlines.push({
-        tag: 'PILOTOS',
-        title: `${winner.lastName} suma su ${nth} victoria de la temporada con ${winner.teamName} y consolida su posición.`,
-        time: `hace ${rand(1, 2)} día${rand(1,2)>1?'s':''}`,
+        tag:   'PILOTOS',
+        title: `${leader.lastName} suma su ${nth} victoria estimada de la temporada y consolida el liderato con ${leader.teamName}.`,
+        time:  `hace ${rand(1, 2)} día${rand(1, 2) > 1 ? 's' : ''}`,
       });
     }
 
-    // Cap at 5
     const result = headlines.slice(0, 5);
-    memCache.set(CACHE_KEY, result, 300); // 5 min cache
+    // Cache TTL: 10 min (key rotates with meetingKey so no staleness risk)
+    memCache.set(CACHE_KEY, result, 600);
     res.json(result);
   } catch (err) {
     console.error('[headlines]', err.message);
-    // Return empty array on failure so the UI degrades gracefully
     res.json([]);
   }
 });
