@@ -139,9 +139,32 @@ async function buildResultsForSession(sessionKey, round, meeting, raceWeekends, 
   }
 
   const finalGap = new Map();
+  const finalPreceding = new Map();
   for (const iv of intervals) {
-    if (iv.gap_to_leader !== null && iv.gap_to_leader !== undefined) {
+    if (iv.gap_to_leader != null)
       finalGap.set(iv.driver_number, iv.gap_to_leader);
+    if (iv.gap_to_preceding != null && iv.gap_to_preceding > 0)
+      finalPreceding.set(iv.driver_number, iv.gap_to_preceding);
+  }
+
+  // OpenF1 often only populates gap_to_leader for P2; for P3+ only gap_to_preceding
+  // is reliable. Walk the finishing order and accumulate gap_to_preceding to derive
+  // a synthetic gap_to_leader for any driver that doesn't already have one.
+  if (finalPreceding.size > 0) {
+    const sortedByPos = Array.from(finalPos.entries()).sort((a, b) => a[1] - b[1]);
+    let accumulated = 0;
+    for (const [driverNum, pos] of sortedByPos) {
+      if (pos === 1) { accumulated = 0; continue; }
+      const known = finalGap.get(driverNum);
+      if (typeof known === 'number') {
+        accumulated = known;
+      } else {
+        const prec = finalPreceding.get(driverNum);
+        if (prec !== undefined) {
+          accumulated += prec;
+          finalGap.set(driverNum, accumulated);
+        }
+      }
     }
   }
 
@@ -159,8 +182,10 @@ async function buildResultsForSession(sessionKey, round, meeting, raceWeekends, 
       const rawGap = finalGap.get(num);
       let gap = null;
       if (pos !== 1) {
-        if (rawGap !== undefined && rawGap !== null) {
-          gap = typeof rawGap === 'number' ? `+${rawGap.toFixed(3)}s` : String(rawGap);
+        if (typeof rawGap === 'number' && rawGap > 0) {
+          gap = `+${rawGap.toFixed(3)}s`;
+        } else if (rawGap !== undefined && rawGap !== null && typeof rawGap === 'string') {
+          gap = rawGap; // already formatted (e.g. "+1 lap" stored as string)
         } else if (totalLaps !== null) {
           // No interval data — derive gap from lap count
           const dLaps = driverLapCounts.get(num) || 0;
