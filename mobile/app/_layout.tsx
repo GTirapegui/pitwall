@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { SWRConfig } from 'swr';
 import { SWR_GLOBAL } from '@/hooks/useSWRConfig';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
@@ -12,7 +12,6 @@ import {
   Archivo_700Bold, Archivo_800ExtraBold, Archivo_900Black,
 } from '@expo-google-fonts/archivo';
 import { SpaceMono_400Regular, SpaceMono_700Bold } from '@expo-google-fonts/space-mono';
-// Keep legacy fonts so existing components don't break during migration
 import { BarlowCondensed_700Bold, BarlowCondensed_400Regular } from '@expo-google-fonts/barlow-condensed';
 import { DMMono_400Regular, DMMono_500Medium } from '@expo-google-fonts/dm-mono';
 import { Barlow_400Regular } from '@expo-google-fonts/barlow';
@@ -21,6 +20,9 @@ import { ThemeProvider, useTheme } from '@/hooks/useTheme';
 import { TimezoneProvider } from '@/hooks/useTimezone';
 import { I18nProvider } from '@/context/I18nContext';
 import TimezoneModal from '@/components/ui/TimezoneModal';
+import F1Loader from '@/components/ui/F1Loader';
+import { useNextEvent } from '@/hooks/useNextEvent';
+import { useDriverStandings } from '@/hooks/useStandings';
 
 // Archivo variable font URL — all weights in one file (woff2)
 const ARCHIVO_URL = 'https://fonts.gstatic.com/s/archivo/v25/k3kPo8UDI-1M0wlSV9XAw6lQkqWY8Q82sLydOxI.woff2';
@@ -92,6 +94,20 @@ export default function RootLayout() {
   );
 }
 
+// ── Blocks app render until critical data arrives ──────────────────────────────
+function AppBootstrap({ children }: { children: React.ReactNode }) {
+  const { data: nextEvent, error: nextError }     = useNextEvent();
+  const { data: standings, error: standingsError } = useDriverStandings();
+
+  // Ready once both have resolved (data OR error — don't wait forever)
+  const ready =
+    (nextEvent     !== undefined || nextError      !== undefined) &&
+    (standings     !== undefined || standingsError !== undefined);
+
+  if (!ready) return <F1Loader />;
+  return <>{children}</>;
+}
+
 function RootLayoutInner() {
   const { theme } = useTheme();
   const C = theme === 'dark' ? Dark : Light;
@@ -105,7 +121,6 @@ function RootLayoutInner() {
     Archivo_900Black,
     SpaceMono_400Regular,
     SpaceMono_700Bold,
-    // Legacy
     BarlowCondensed_700Bold,
     BarlowCondensed_400Regular,
     DMMono_400Regular,
@@ -117,27 +132,37 @@ function RootLayoutInner() {
     if (fontsLoaded && Platform.OS !== 'web') {
       SplashScreen.hideAsync().catch(() => {});
     }
-    // Sync data-theme on web so CSS variables and CalendarScreen CSS work
     if (Platform.OS === 'web' && typeof document !== 'undefined') {
       document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light');
     }
   }, [fontsLoaded, theme]);
 
-  if (!fontsLoaded && Platform.OS !== 'web') return null;
+  // While fonts load on native: show F1Loader with dark background.
+  // SplashScreen is still visible on top so users won't see mismatched fonts.
+  if (!fontsLoaded && Platform.OS !== 'web') {
+    return (
+      <View style={{ flex: 1, backgroundColor: C.paper }}>
+        <F1Loader />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaProvider>
       <TimezoneModal isFirstUse />
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: C.paper },
-          animation: 'none',
-        }}
-      >
-        <Stack.Screen name="(tabs)" />
-      </Stack>
+      {/* AppBootstrap shows F1Loader until next-event + standings have arrived */}
+      <AppBootstrap>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: C.paper },
+            animation: 'none',
+          }}
+        >
+          <Stack.Screen name="(tabs)" />
+        </Stack>
+      </AppBootstrap>
     </SafeAreaProvider>
   );
 }
