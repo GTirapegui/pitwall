@@ -3,65 +3,112 @@ const router = express.Router();
 const cache = require('../cache/memoryCache');
 const { get } = require('../services/openf1');
 
-const SESSION_KEYS = {
-  monaco:        9860,
-  barcelona:     9889,
-  silverstone:   9910,
-  monza:         9930,
-  spa:           9906,
-  zandvoort:     9921,
-  hungaroring:   9915,
-  albert_park:   9472,
-  suzuka:        9479,
-  bahrain:       9468,
-  jeddah:        9475,
-  miami:         9483,
-  imola:         9486,
-  red_bull_ring: 9904,
-  baku:          9894,
-  marina_bay:    9935,
-  cota:          9940,
-  rodriguez:     9945,
-  interlagos:    9948,
-  las_vegas:     9951,
-  lusail:        9954,
-  yas_marina:    9957,
-  villeneuve:    9897,
-  shanghai:      9480,
+// ── OpenF1 circuit_short_name candidates per circuit key ─────────────────────
+// Multiple names tried in order because OpenF1 uses different values over years.
+const CIRCUIT_NAMES = {
+  monaco:        ['Monaco', 'Monte Carlo'],
+  barcelona:     ['Barcelona', 'Catalunya'],
+  silverstone:   ['Silverstone'],
+  monza:         ['Monza'],
+  spa:           ['Spa-Francorchamps'],
+  zandvoort:     ['Zandvoort'],
+  hungaroring:   ['Hungaroring'],
+  albert_park:   ['Melbourne', 'Albert Park'],
+  shanghai:      ['Shanghai'],
+  suzuka:        ['Suzuka'],
+  bahrain:       ['Sakhir', 'Bahrain'],
+  jeddah:        ['Jeddah'],
+  miami:         ['Miami'],
+  imola:         ['Imola'],
+  red_bull_ring: ['Spielberg', 'Red Bull Ring'],
+  baku:          ['Baku'],
+  marina_bay:    ['Singapore', 'Marina Bay'],
+  cota:          ['Austin', 'COTA'],
+  rodriguez:     ['Mexico City'],
+  interlagos:    ['Interlagos', 'São Paulo', 'Sao Paulo'],
+  las_vegas:     ['Las Vegas'],
+  lusail:        ['Lusail'],
+  yas_marina:    ['Yas Marina'],
+  villeneuve:    ['Montreal', 'Gilles Villeneuve'],
 };
+
+// ── Find a valid P1 session key from OpenF1 (cached 7 days) ──────────────────
+async function findSessionKey(circuitKey) {
+  const cacheKey = `session_key_v2_${circuitKey}`;
+  const hit = cache.get(cacheKey);
+  if (hit) return hit;
+
+  const names = CIRCUIT_NAMES[circuitKey];
+  if (!names) return null;
+
+  for (const year of [2024, 2023]) {
+    for (const name of names) {
+      try {
+        const sessions = await get('/sessions', {
+          year,
+          circuit_short_name: name,
+          session_name: 'Practice 1',
+        });
+        if (Array.isArray(sessions) && sessions.length > 0) {
+          const key = sessions[0].session_key;
+          console.log(`[circuit-map] ${circuitKey}: found session ${key} (${name} ${year} P1)`);
+          cache.set(cacheKey, key, 86400 * 7);
+          return key;
+        }
+      } catch {
+        // try next name/year
+      }
+    }
+  }
+
+  console.warn(`[circuit-map] ${circuitKey}: no OpenF1 session found`);
+  return null;
+}
 
 // GET /api/circuit-map/:circuitKey
 router.get('/:circuitKey', async (req, res) => {
   const { circuitKey } = req.params;
-  const sessionKey = SESSION_KEYS[circuitKey];
 
-  if (!sessionKey) {
-    return res.status(404).json({ error: `No session key for circuit: ${circuitKey}` });
+  if (!CIRCUIT_NAMES[circuitKey]) {
+    return res.status(404).json({ error: `Unknown circuit: ${circuitKey}` });
   }
 
-  const cacheKey = `circuit_map_v2_${circuitKey}`;
-  const cached = cache.get(cacheKey);
-  if (cached) {
+  const svgCacheKey = `circuit_map_v3_${circuitKey}`;
+  const cachedSvg = cache.get(svgCacheKey);
+  if (cachedSvg) {
     res.setHeader('Content-Type', 'image/svg+xml');
     res.setHeader('Cache-Control', 'public, max-age=86400');
-    return res.send(cached);
+    return res.send(cachedSvg);
   }
 
   try {
-    const DRIVER_CANDIDATES = [1, 16, 11, 44, 63, 4, 55, 14];
+    const sessionKey = await findSessionKey(circuitKey);
+    if (!sessionKey) {
+      return res.status(404).json({ error: `No session data for circuit: ${circuitKey}` });
+    }
+
+    const DRIVERS = [1, 16, 11, 44, 63, 4, 55, 14, 81, 22];
     let points = null;
 
-    for (const dnum of DRIVER_CANDIDATES) {
+    for (const dnum of DRIVERS) {
+      // Try clean single-lap first (best quality)
       points = await fetchCleanLap(sessionKey, dnum);
       if (points && points.length >= 80) break;
+
+      // Fall back to raw session data for this driver
+      if (!points || points.length < 80) {
+        const raw = await fetchRawLocation(sessionKey, dnum);
+        if (raw && raw.length >= 80) { points = raw; break; }
+      }
     }
 
     if (!points || points.length < 50) {
-      return res.status(502).json({ error: 'Insufficient location data for circuit' });
+      console.warn(`[circuit-map] ${circuitKey}: insufficient points (${points?.length ?? 0})`);
+      return res.status(502).json({ error: 'Insufficient GPS data for circuit' });
     }
 
     const svg = buildSvg(points);
-    cache.set(cacheKey, svg, 86400);
+    cache.set(svgCacheKey, svg, 86400);
 
     res.setHeader('Content-Type', 'image/svg+xml');
     res.setHeader('Cache-Control', 'public, max-age=86400');
@@ -72,43 +119,54 @@ router.get('/:circuitKey', async (req, res) => {
   }
 });
 
-// ── Fetch one clean lap worth of GPS points ──────────────────────────────────
-
+// ── Fetch one clean lap of GPS points ────────────────────────────────────────
 async function fetchCleanLap(sessionKey, driverNumber) {
   try {
-    // Get laps to find a representative in-lap (skip lap 1 = outlap)
     const laps = await get('/laps', { session_key: sessionKey, driver_number: driverNumber });
     if (!Array.isArray(laps) || laps.length < 3) return null;
 
-    // Pick lap 3 or 4 — past the outlap, usually representative
-    const targetLap = laps.find(l => l.lap_number === 4) || laps.find(l => l.lap_number === 3) || laps[2];
+    // Skip outlap (lap 1); prefer lap 4 > lap 3 > any lap after 2
+    const targetLap =
+      laps.find(l => l.lap_number === 4) ||
+      laps.find(l => l.lap_number === 3) ||
+      laps.find(l => l.lap_number > 2);
     if (!targetLap?.date_start) return null;
 
-    const lapStart = new Date(targetLap.date_start).getTime();
-    // lap_duration is in seconds; add a small buffer
-    const durationMs = (targetLap.lap_duration ?? 120) * 1000;
-    const lapEnd = lapStart + durationMs + 2000;
+    const lapStart  = new Date(targetLap.date_start).getTime();
+    const durationMs = (targetLap.lap_duration ?? 130) * 1000;
+    const lapEnd    = lapStart + durationMs + 3000;
 
-    // Fetch all location data for this driver
     const allLoc = await get('/location', { session_key: sessionKey, driver_number: driverNumber });
     if (!Array.isArray(allLoc) || allLoc.length === 0) return null;
 
-    // Filter to only this lap's timeframe
     const lapPoints = allLoc.filter(p => {
       const t = new Date(p.date).getTime();
       return t >= lapStart && t <= lapEnd && p.x != null && p.y != null;
     });
 
     if (lapPoints.length < 50) return null;
-
     return lapPoints.map(p => ({ x: p.x, y: p.y }));
   } catch {
     return null;
   }
 }
 
-// ── Point processing pipeline ─────────────────────────────────────────────────
+// ── Fallback: all session location data, heavily downsampled ─────────────────
+async function fetchRawLocation(sessionKey, driverNumber) {
+  try {
+    const data = await get('/location', { session_key: sessionKey, driver_number: driverNumber });
+    if (!Array.isArray(data) || data.length === 0) return null;
+    // Keep every 12th point to reduce noise while preserving shape
+    return data
+      .filter((_, i) => i % 12 === 0)
+      .map(p => ({ x: p.x, y: p.y }))
+      .filter(p => p.x != null && p.y != null);
+  } catch {
+    return null;
+  }
+}
 
+// ── Point processing ──────────────────────────────────────────────────────────
 function deduplicate(points, minDist = 1.5) {
   if (points.length === 0) return points;
   const result = [points[0]];
@@ -116,9 +174,7 @@ function deduplicate(points, minDist = 1.5) {
     const last = result[result.length - 1];
     const dx = points[i].x - last.x;
     const dy = points[i].y - last.y;
-    if (Math.sqrt(dx * dx + dy * dy) >= minDist) {
-      result.push(points[i]);
-    }
+    if (Math.sqrt(dx * dx + dy * dy) >= minDist) result.push(points[i]);
   }
   return result;
 }
@@ -149,15 +205,9 @@ function normalize(points, W, H, PAD) {
   const minY = Math.min(...ys), maxY = Math.max(...ys);
   const rangeX = maxX - minX || 1;
   const rangeY = maxY - minY || 1;
-
-  const scaleX = (W - PAD * 2) / rangeX;
-  const scaleY = (H - PAD * 2) / rangeY;
-  const scale  = Math.min(scaleX, scaleY);
-
-  // Center within padded area
+  const scale  = Math.min((W - PAD * 2) / rangeX, (H - PAD * 2) / rangeY);
   const offsetX = PAD + ((W - PAD * 2) - rangeX * scale) / 2;
   const offsetY = PAD + ((H - PAD * 2) - rangeY * scale) / 2;
-
   return points.map(p => ({
     x: (p.x - minX) * scale + offsetX,
     y: (p.y - minY) * scale + offsetY,
@@ -176,43 +226,25 @@ function pointsToPath(points) {
   return d;
 }
 
-// ── SVG builder ───────────────────────────────────────────────────────────────
-
 function buildSvg(rawPoints) {
   const W = 400, H = 280, PAD = 30;
-
-  // 1. Deduplicate raw GPS noise
-  const deduped = deduplicate(rawPoints, 1.5);
-
-  // 2. Normalize to viewport coordinates
-  const normed = normalize(deduped, W, H, PAD);
-
-  // 3. Deduplicate again after normalization (catches close points at pixel scale)
-  const clean = deduplicate(normed, 2);
-
-  // 4. Chaikin smoothing — 3 iterations
+  const deduped  = deduplicate(rawPoints, 1.5);
+  const normed   = normalize(deduped, W, H, PAD);
+  const clean    = deduplicate(normed, 2);
   const smoothed = chaikin(clean, 3);
+  const pathD    = pointsToPath(smoothed);
 
-  // 5. Build quadratic bezier path
-  const pathD = pointsToPath(smoothed);
-
-  // 6. Start/finish marker — perpendicular rect at point[0]
   const p0 = smoothed[0];
   const p1 = smoothed[1] || { x: p0.x + 1, y: p0.y };
-  const angle = Math.atan2(p1.y - p0.y, p1.x - p0.x);
-  const perpAngle = angle + Math.PI / 2;
-  const sfLen = 6;
-  const sfX1 = (p0.x + Math.cos(perpAngle) * sfLen).toFixed(1);
-  const sfY1 = (p0.y + Math.sin(perpAngle) * sfLen).toFixed(1);
-  const sfX2 = (p0.x - Math.cos(perpAngle) * sfLen).toFixed(1);
-  const sfY2 = (p0.y - Math.sin(perpAngle) * sfLen).toFixed(1);
+  const perp = Math.atan2(p1.y - p0.y, p1.x - p0.x) + Math.PI / 2;
+  const sfX1 = (p0.x + Math.cos(perp) * 6).toFixed(1);
+  const sfY1 = (p0.y + Math.sin(perp) * 6).toFixed(1);
+  const sfX2 = (p0.x - Math.cos(perp) * 6).toFixed(1);
+  const sfY2 = (p0.y - Math.sin(perp) * 6).toFixed(1);
 
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
-  <!-- glow -->
   <path d="${pathD}" fill="none" stroke="#E10600" stroke-width="10" stroke-opacity="0.12" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- track -->
   <path d="${pathD}" fill="none" stroke="#E10600" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- start/finish line -->
   <line x1="${sfX1}" y1="${sfY1}" x2="${sfX2}" y2="${sfY2}" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
 </svg>`;
 }
