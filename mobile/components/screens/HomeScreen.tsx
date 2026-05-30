@@ -198,7 +198,11 @@ function LastGPCard({ results }: { results: any }) {
   const p1 = r.results.find((d: any) => d.position === 1);
   const p2 = r.results.find((d: any) => d.position === 2);
   const p3 = r.results.find((d: any) => d.position === 3);
-  const fl = r.results.find((d: any) => d.fastestLap);
+  // Top-level fields are the authoritative source; results-array scan is the fallback.
+  const flAbbr = r.fastestLapAbbreviation
+    ?? r.results.find((d: any) => d.fastestLap)?.abbreviation
+    ?? null;
+  const flTime = r.fastestLapTime ?? null;
   const flagCode = DRIVER_CODES[p1?.abbreviation ?? ''] ?? 'un';
   const tc1 = TEAM[p1?.teamName as keyof typeof TEAM] ?? '#8A8A8E';
 
@@ -246,9 +250,10 @@ function LastGPCard({ results }: { results: any }) {
       <View style={[s.gpExtra, { borderColor: C.line, backgroundColor: C.line }]}>
         <View style={[s.gx, { backgroundColor: C.surface }]}>
           <Text style={[s.gxLabel, { color: C.muted }]}>{t('home.fastestLap')}</Text>
-          <Text style={[s.gxVal, { color: C.ink }]}>
-            {fl?.abbreviation ?? '—'}
-          </Text>
+          <Text style={[s.gxVal, { color: C.ink }]}>{flAbbr ?? '—'}</Text>
+          {flTime && (
+            <Text style={[s.gxLabel, { color: C.muted, marginTop: 2 }]}>{flTime}</Text>
+          )}
         </View>
         <View style={[s.gx, { backgroundColor: C.surface }]}>
           <Text style={[s.gxLabel, { color: C.muted }]}>GP</Text>

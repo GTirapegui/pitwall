@@ -86,13 +86,37 @@ async function buildResultsForSession(sessionKey, round, meeting, raceWeekends, 
   const finalPos = new Map();
   for (const pos of positions) finalPos.set(pos.driver_number, pos.position);
 
-  let fastestLapDriver = null, fastestLapDuration = Infinity;
-  for (const lap of laps) {
-    if (lap.lap_duration && lap.lap_duration < fastestLapDuration) {
-      fastestLapDuration = lap.lap_duration;
-      fastestLapDriver   = lap.driver_number;
+  function scanFastest(lapArr) {
+    let driver = null, best = Infinity;
+    for (const lap of lapArr) {
+      if (lap.lap_duration > 0 && lap.lap_duration < best) {
+        best   = lap.lap_duration;
+        driver = lap.driver_number;
+      }
+    }
+    return { driver, duration: best };
+  }
+
+  let { driver: fastestLapDriver, duration: fastestLapDuration } = scanFastest(laps);
+
+  // If the initial laps fetch had no usable data, try a targeted fetch that
+  // filters out pit-out laps (smaller response, more likely to have valid durations).
+  if (fastestLapDriver === null) {
+    const targeted = await get('/laps', { session_key: sessionKey, is_pit_out_lap: false }).catch(() => []);
+    ({ driver: fastestLapDriver, duration: fastestLapDuration } = scanFastest(targeted));
+    if (fastestLapDriver !== null) {
+      console.log(`[results] fastest lap via targeted fetch: driver ${fastestLapDriver} ${fastestLapDuration}s`);
     }
   }
+
+  // Format seconds → "m:ss.sss"  e.g. 83.456 → "1:23.456"
+  const fastestLapTime = (fastestLapDriver !== null && isFinite(fastestLapDuration))
+    ? (() => {
+        const m = Math.floor(fastestLapDuration / 60);
+        const s = (fastestLapDuration % 60).toFixed(3).padStart(6, '0');
+        return `${m}:${s}`;
+      })()
+    : null;
 
   const totalLaps = laps.length > 0 ? Math.max(...laps.map(l => l.lap_number || 0)) : null;
 
@@ -128,15 +152,21 @@ async function buildResultsForSession(sessionKey, round, meeting, raceWeekends, 
     })
     .sort((a, b) => a.position - b.position);
 
+  const fastestLapAbbreviation = fastestLapDriver !== null
+    ? (driverInfo.get(fastestLapDriver)?.abbreviation ?? null)
+    : null;
+
   return {
     round,
-    totalRounds:      raceWeekends.length,
-    meetingName:      meeting.meeting_name || '',
-    circuitShortName: meeting.circuit_short_name || '',
-    countryName:      meeting.country_name || '',
-    countryCode:      meeting.country_code || '',
-    dateStart:        meeting.date_start || '',
+    totalRounds:            raceWeekends.length,
+    meetingName:            meeting.meeting_name || '',
+    circuitShortName:       meeting.circuit_short_name || '',
+    countryName:            meeting.country_name || '',
+    countryCode:            meeting.country_code || '',
+    dateStart:              meeting.date_start || '',
     totalLaps,
+    fastestLapTime,
+    fastestLapAbbreviation,
     results,
   };
 }

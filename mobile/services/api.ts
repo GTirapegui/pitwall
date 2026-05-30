@@ -101,6 +101,8 @@ export interface ResultsResponse {
   countryCode: string;
   dateStart: string;
   totalLaps: number | null;
+  fastestLapTime: string | null;
+  fastestLapAbbreviation: string | null;
   results: RaceResult[];
   message?: string;
 }
