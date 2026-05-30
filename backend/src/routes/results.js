@@ -24,9 +24,10 @@ const POINTS_SYSTEM = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 
 // ── Shared builder — returns the full results object for a given session ───────
 async function buildResultsForSession(sessionKey, round, meeting, raceWeekends) {
+  // All calls get .catch(() => []) so a single OpenF1 failure doesn't kill the whole response
   const [positions, drivers, laps, intervals] = await Promise.all([
-    get('/position', { session_key: sessionKey }),
-    get('/drivers',  { session_key: sessionKey }),
+    get('/position', { session_key: sessionKey }).catch(() => []),
+    get('/drivers',  { session_key: sessionKey }).catch(() => []),
     get('/laps',     { session_key: sessionKey }).catch(() => []),
     get('/intervals',{ session_key: sessionKey }).catch(() => []),
   ]);
@@ -62,6 +63,11 @@ async function buildResultsForSession(sessionKey, round, meeting, raceWeekends) 
     if (iv.gap_to_leader !== null && iv.gap_to_leader !== undefined) {
       finalGap.set(iv.driver_number, iv.gap_to_leader);
     }
+  }
+
+  if (finalPos.size === 0) {
+    console.warn(`[results] session ${sessionKey}: no position data from OpenF1`);
+    return null; // caller will handle as "data not available"
   }
 
   const results = Array.from(finalPos.entries())
@@ -123,6 +129,7 @@ router.get('/latest', async (req, res) => {
     const meeting = raceWeekends[round - 1] || {};
 
     const result = await buildResultsForSession(lastRace.session_key, round, meeting, raceWeekends);
+    if (!result) return res.json({ message: 'Race data not yet available from OpenF1', results: null });
     cache.set(cacheKey, result, 3600);
     res.json(result);
   } catch (err) {
@@ -164,6 +171,7 @@ router.get('/:round', async (req, res) => {
     const result = await buildResultsForSession(
       raceSession.session_key, roundNum, meeting, raceWeekends
     );
+    if (!result) return res.json({ round: roundNum, message: 'Race data not yet available from OpenF1', results: null });
     cache.set(cacheKey, result, 86400); // 24h — past race data never changes
     res.json(result);
   } catch (err) {

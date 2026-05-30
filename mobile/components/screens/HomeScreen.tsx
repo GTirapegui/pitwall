@@ -20,6 +20,7 @@ import { getCircuitByEvent, COMPOUND_COLORS } from '@/constants/circuits';
 import { useHeadlines, Headline } from '@/hooks/useHeadlines';
 import Tooltip from '@/components/ui/Tooltip';
 import CircuitMap from '@/components/ui/CircuitMap';
+import F1Loader from '@/components/ui/F1Loader';
 import { useI18n } from '@/context/I18nContext';
 
 // ── Font tokens ───────────────────────────────────────────────────────────────
@@ -498,11 +499,11 @@ export default function HomeScreen() {
   const C = useColors();
   const { t } = useI18n();
   const router = useRouter();
-  const { data: nextEvent }    = useNextEvent();
-  const { data: results }      = useResults();
-  const { data: driverSt }     = useDriverStandings();
-  const { data: constrSt }     = useConstructorStandings();
-  const { data: headlineData } = useHeadlines();
+  const { data: nextEvent,   isLoading: loadingNext }       = useNextEvent();
+  const { data: results,    isLoading: loadingResults }     = useResults();
+  const { data: driverSt,   isLoading: loadingDrivers }     = useDriverStandings();
+  const { data: constrSt,   isLoading: loadingConstrs }     = useConstructorStandings();
+  const { data: headlineData, isLoading: loadingHeadlines } = useHeadlines();
 
   const [favAbbr,    setFavAbbr]    = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
@@ -537,17 +538,24 @@ export default function HomeScreen() {
     >
       {/* TU PILOTO */}
       <SectionLabel title={t('home.yourDriver')} right={`${t('home.season')} 2026`} />
-      {favDriver && (
+      {loadingDrivers ? (
+        <F1Loader compact />
+      ) : favDriver ? (
         <DriverCard
           driver={favDriver}
           nextEvent={nextEvent}
           results={results}
           onChangeTap={() => setShowPicker(true)}
         />
-      )}
+      ) : null}
 
       {/* ÚLTIMO GP */}
-      {results?.results && (
+      {loadingResults ? (
+        <>
+          <SectionLabel title={t('home.lastRace')} />
+          <F1Loader compact />
+        </>
+      ) : results?.results ? (
         <>
           <SectionLabel
             title={t('home.lastRace')}
@@ -555,10 +563,15 @@ export default function HomeScreen() {
           />
           <LastGPCard results={results} />
         </>
-      )}
+      ) : null}
 
       {/* LUCHA POR EL TÍTULO */}
-      {leader1 && second1 && (
+      {(loadingDrivers || loadingConstrs) && !leader1 ? (
+        <>
+          <SectionLabel title={t('home.titleFight')} />
+          <F1Loader compact />
+        </>
+      ) : leader1 && second1 ? (
         <>
           <SectionLabel
             title={t('home.titleFight')}
@@ -585,10 +598,15 @@ export default function HomeScreen() {
             )}
           </View>
         </>
-      )}
+      ) : null}
 
       {/* CAMPEONATO TOP 5 */}
-      {drivers.length > 0 && (
+      {loadingDrivers && drivers.length === 0 ? (
+        <>
+          <SectionLabel title={t('home.championship')} />
+          <F1Loader compact />
+        </>
+      ) : drivers.length > 0 ? (
         <>
           <SectionLabel
             title={t('home.championship')}
@@ -597,10 +615,15 @@ export default function HomeScreen() {
           />
           <Top5Table drivers={drivers} />
         </>
-      )}
+      ) : null}
 
-      {/* PRÓXIMO CIRCUITO — render whenever there is a next event (not season-over) */}
-      {nextEvent && nextEvent.mode !== 'lastRace' && (
+      {/* PRÓXIMO CIRCUITO */}
+      {loadingNext && !nextEvent ? (
+        <>
+          <SectionLabel title={t('home.nextCircuit')} />
+          <F1Loader compact />
+        </>
+      ) : nextEvent && nextEvent.mode !== 'lastRace' ? (
         <>
           <SectionLabel
             title={t('home.nextCircuit')}
@@ -608,11 +631,13 @@ export default function HomeScreen() {
           />
           <CircuitCard nextEvent={nextEvent} />
         </>
-      )}
+      ) : null}
 
       {/* TITULARES */}
       <SectionLabel title={t('home.headlines')} />
-      {(headlineData ?? []).map((h: Headline, i: number) => {
+      {loadingHeadlines && !headlineData ? (
+        <F1Loader compact />
+      ) : (headlineData ?? []).map((h: Headline, i: number) => {
         const { bg, c } = TAG_COLORS[h.tag] ?? { bg: C.surface2, c: C.muted };
         return (
           <View key={i} style={[s.nrow, { backgroundColor: C.surface, borderColor: C.line }]}>

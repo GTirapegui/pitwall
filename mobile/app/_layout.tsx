@@ -3,7 +3,7 @@ import { SWRConfig } from 'swr';
 import { SWR_GLOBAL } from '@/hooks/useSWRConfig';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Platform, View } from 'react-native';
+import { Platform } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
@@ -20,9 +20,6 @@ import { ThemeProvider, useTheme } from '@/hooks/useTheme';
 import { TimezoneProvider } from '@/hooks/useTimezone';
 import { I18nProvider } from '@/context/I18nContext';
 import TimezoneModal from '@/components/ui/TimezoneModal';
-import F1Loader from '@/components/ui/F1Loader';
-import { useNextEvent } from '@/hooks/useNextEvent';
-import { useDriverStandings } from '@/hooks/useStandings';
 
 // Archivo variable font URL — all weights in one file (woff2)
 const ARCHIVO_URL = 'https://fonts.gstatic.com/s/archivo/v25/k3kPo8UDI-1M0wlSV9XAw6lQkqWY8Q82sLydOxI.woff2';
@@ -94,20 +91,6 @@ export default function RootLayout() {
   );
 }
 
-// ── Blocks app render until critical data arrives ──────────────────────────────
-function AppBootstrap({ children }: { children: React.ReactNode }) {
-  const { data: nextEvent, error: nextError }     = useNextEvent();
-  const { data: standings, error: standingsError } = useDriverStandings();
-
-  // Ready once both have resolved (data OR error — don't wait forever)
-  const ready =
-    (nextEvent     !== undefined || nextError      !== undefined) &&
-    (standings     !== undefined || standingsError !== undefined);
-
-  if (!ready) return <F1Loader />;
-  return <>{children}</>;
-}
-
 function RootLayoutInner() {
   const { theme } = useTheme();
   const C = theme === 'dark' ? Dark : Light;
@@ -137,32 +120,21 @@ function RootLayoutInner() {
     }
   }, [fontsLoaded, theme]);
 
-  // While fonts load on native: show F1Loader with dark background.
-  // SplashScreen is still visible on top so users won't see mismatched fonts.
-  if (!fontsLoaded && Platform.OS !== 'web') {
-    return (
-      <View style={{ flex: 1, backgroundColor: C.paper }}>
-        <F1Loader />
-      </View>
-    );
-  }
+  if (!fontsLoaded && Platform.OS !== 'web') return null;
 
   return (
     <SafeAreaProvider>
       <TimezoneModal isFirstUse />
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-      {/* AppBootstrap shows F1Loader until next-event + standings have arrived */}
-      <AppBootstrap>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: C.paper },
-            animation: 'none',
-          }}
-        >
-          <Stack.Screen name="(tabs)" />
-        </Stack>
-      </AppBootstrap>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: C.paper },
+          animation: 'none',
+        }}
+      >
+        <Stack.Screen name="(tabs)" />
+      </Stack>
     </SafeAreaProvider>
   );
 }
