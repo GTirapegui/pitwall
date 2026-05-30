@@ -287,7 +287,7 @@ router.get('/:round', async (req, res) => {
       return res.status(404).json({ error: 'Race cancelled' });
 
     const raceSessionEntry = scheduleMeeting.sessions.find(
-      s => s.sessionType === 'Race' && new Date(s.dateEnd) < now
+      s => s.sessionType === 'Race' && s.sessionName === 'Race' && new Date(s.dateEnd) < now
     );
     console.log(`[results/${roundNum}] sessionKey: ${raceSessionEntry?.sessionKey ?? 'none'}`);
 
