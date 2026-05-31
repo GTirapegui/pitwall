@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Política de Privacidad / Privacy Policy — Pitwall</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0B0B0F;
+      --surface:   #14141A;
+      --border:    #1E1E28;
+      --accent:    #E10600;
+      --text:      #E8E8F0;
+      --muted:     #8888A0;
+      --font:      -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 16px;
+      line-height: 1.7;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 28px 24px;
+      text-align: center;
+    }
+
+    .logo-mark {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      background: var(--accent);
+      border-radius: 50%;
+      margin-right: 10px;
+      vertical-align: middle;
+      position: relative;
+      top: -1px;
+    }
+
+    header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      display: inline;
+      color: var(--text);
+    }
+
+    header p {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── Lang switcher ── */
+    .lang-bar {
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 24px;
+      text-align: center;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .lang-bar a {
+      color: var(--muted);
+      text-decoration: none;
+      padding: 4px 10px;
+      border-radius: 4px;
+      transition: color 0.15s, background 0.15s;
+    }
+
+    .lang-bar a:hover,
+    .lang-bar a.active {
+      color: var(--text);
+      background: var(--surface);
+    }
+
+    .lang-bar span { margin: 0 4px; }
+
+    /* ── Main layout ── */
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    /* ── Language sections ── */
+    section.lang-section { display: none; }
+    section.lang-section.visible { display: block; }
+
+    /* ── Typography ── */
+    .doc-title {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+
+    .doc-date {
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-bottom: 40px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin: 40px 0 14px;
+    }
+
+    p { margin-bottom: 14px; color: var(--text); }
+
+    ul {
+      margin: 0 0 14px 0;
+      padding-left: 20px;
+    }
+
+    ul li {
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+
+    ul li::marker { color: var(--accent); }
+
+    .highlight-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 6px;
+      padding: 16px 20px;
+      margin: 16px 0 24px;
+      font-size: 0.95rem;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 24px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <span class="logo-mark"></span>
+    <h1>Pitwall</h1>
+  </div>
+  <p>F1 Live Timing & Data</p>
+</header>
+
+<div class="lang-bar">
+  <a href="#" class="active" id="btn-es" onclick="setLang('es'); return false;">Español</a>
+  <span>·</span>
+  <a href="#" id="btn-en" onclick="setLang('en'); return false;">English</a>
+</div>
+
+<main>
+
+  <!-- ═══════════════════════════════════════ ESPAÑOL ═══ -->
+  <section class="lang-section visible" id="sec-es">
+
+    <div class="doc-title">Política de Privacidad</div>
+    <div class="doc-date">Última actualización: mayo 2025</div>
+
+    <div class="highlight-box">
+      Pitwall no recopila ni almacena ningún dato personal. La app funciona
+      completamente sin registro ni cuenta de usuario.
+    </div>
+
+    <h2>1. Quiénes somos</h2>
+    <p>
+      Pitwall es una aplicación móvil de seguimiento en tiempo real de la
+      Fórmula 1. Muestra datos de cronometraje, resultados, clima y
+      clasificaciones durante los fines de semana de carrera.
+    </p>
+
+    <h2>2. Datos que recopilamos</h2>
+    <p>Pitwall <strong>no recopila ningún dato personal</strong>. Las únicas
+    preferencias que se guardan son:</p>
+    <ul>
+      <li><strong>Zona horaria:</strong> se almacena localmente en tu
+        dispositivo para mostrar los horarios de sesión en tu hora local.</li>
+      <li><strong>Piloto favorito:</strong> se almacena localmente en tu
+        dispositivo para resaltarlo en las pantallas de cronometraje.</li>
+    </ul>
+    <p>
+      Estos datos <strong>nunca salen de tu dispositivo</strong>, no se
+      transmiten a ningún servidor y se eliminan al desinstalar la app.
+    </p>
+
+    <h2>3. Fuentes de datos</h2>
+    <p>La app consume únicamente APIs públicas de terceros:</p>
+    <ul>
+      <li><a href="https://openf1.org" target="_blank" rel="noopener">OpenF1</a> — datos de cronometraje en tiempo real</li>
+      <li><a href="https://api.jolpi.ca/ergast/" target="_blank" rel="noopener">Jolpica / Ergast</a> — calendario, resultados y estadísticas históricas</li>
+      <li><a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> — condiciones meteorológicas en el circuito</li>
+    </ul>
+    <p>
+      Pitwall no controla ni es responsable de las políticas de privacidad de
+      estos servicios. Te recomendamos consultar sus respectivas políticas.
+    </p>
+
+    <h2>4. Compartición de datos con terceros</h2>
+    <p>
+      Pitwall <strong>no vende, comparte ni transmite</strong> ningún dato a
+      terceros. No utilizamos servicios de analíticas, publicidad ni
+      seguimiento de usuarios.
+    </p>
+
+    <h2>5. Registro y cuenta de usuario</h2>
+    <p>
+      La app <strong>no requiere registro</strong> ni creación de cuenta.
+      No recopilamos direcciones de correo electrónico, nombres de usuario
+      ni contraseñas.
+    </p>
+
+    <h2>6. Permisos del dispositivo</h2>
+    <p>Pitwall puede solicitar acceso a:</p>
+    <ul>
+      <li><strong>Internet:</strong> para consultar las APIs públicas indicadas
+        en la sección 3.</li>
+      <li><strong>Zona horaria del sistema:</strong> como valor predeterminado
+        de la preferencia local.</li>
+    </ul>
+    <p>No se solicita acceso a cámara, micrófono, contactos, ubicación
+    precisa ni ningún otro dato sensible.</p>
+
+    <h2>7. Menores de edad</h2>
+    <p>
+      Pitwall no recopila datos de ningún usuario, incluyendo menores de edad.
+      La app no está dirigida específicamente a menores de 13 años.
+    </p>
+
+    <h2>8. Cambios en esta política</h2>
+    <p>
+      Cualquier modificación se publicará en esta página con la fecha de
+      actualización. Te recomendamos revisarla periódicamente.
+    </p>
+
+    <h2>9. Contacto</h2>
+    <p>
+      Si tienes preguntas sobre esta política de privacidad, puedes
+      escribirnos a:
+      <a href="mailto:gustavo.tirapeguicortes@gmail.com">gustavo.tirapeguicortes@gmail.com</a>
+    </p>
+
+  </section>
+
+  <!-- ═══════════════════════════════════════ ENGLISH ═══ -->
+  <section class="lang-section" id="sec-en">
+
+    <div class="doc-title">Privacy Policy</div>
+    <div class="doc-date">Last updated: May 2025</div>
+
+    <div class="highlight-box">
+      Pitwall does not collect or store any personal data. The app works
+      entirely without registration or a user account.
+    </div>
+
+    <h2>1. About us</h2>
+    <p>
+      Pitwall is a Formula 1 real-time tracking mobile app. It displays
+      timing data, results, weather conditions, and standings during
+      race weekends.
+    </p>
+
+    <h2>2. Data we collect</h2>
+    <p>Pitwall <strong>does not collect any personal data</strong>. The only
+    preferences saved are:</p>
+    <ul>
+      <li><strong>Timezone:</strong> stored locally on your device to display
+        session times in your local time.</li>
+      <li><strong>Favourite driver:</strong> stored locally on your device to
+        highlight them on timing screens.</li>
+    </ul>
+    <p>
+      These preferences <strong>never leave your device</strong>, are not
+      transmitted to any server, and are deleted when you uninstall the app.
+    </p>
+
+    <h2>3. Data sources</h2>
+    <p>The app exclusively consumes public third-party APIs:</p>
+    <ul>
+      <li><a href="https://openf1.org" target="_blank" rel="noopener">OpenF1</a> — real-time timing data</li>
+      <li><a href="https://api.jolpi.ca/ergast/" target="_blank" rel="noopener">Jolpica / Ergast</a> — calendar, results, and historical statistics</li>
+      <li><a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a> — circuit weather conditions</li>
+    </ul>
+    <p>
+      Pitwall does not control or take responsibility for the privacy policies
+      of these services. We encourage you to review their respective policies.
+    </p>
+
+    <h2>4. Sharing data with third parties</h2>
+    <p>
+      Pitwall <strong>does not sell, share, or transmit</strong> any data to
+      third parties. We do not use analytics services, advertising networks,
+      or user-tracking tools.
+    </p>
+
+    <h2>5. Registration and user accounts</h2>
+    <p>
+      The app <strong>does not require registration</strong> or account
+      creation. We do not collect email addresses, usernames, or passwords.
+    </p>
+
+    <h2>6. Device permissions</h2>
+    <p>Pitwall may request access to:</p>
+    <ul>
+      <li><strong>Internet:</strong> to query the public APIs listed in
+        section 3.</li>
+      <li><strong>System timezone:</strong> as the default value for the
+        local preference.</li>
+    </ul>
+    <p>No access is requested to your camera, microphone, contacts, precise
+    location, or any other sensitive data.</p>
+
+    <h2>7. Children</h2>
+    <p>
+      Pitwall does not collect data from any user, including children.
+      The app is not specifically directed at children under 13.
+    </p>
+
+    <h2>8. Changes to this policy</h2>
+    <p>
+      Any changes will be published on this page with an updated date.
+      We recommend reviewing it periodically.
+    </p>
+
+    <h2>9. Contact</h2>
+    <p>
+      If you have questions about this privacy policy, you can reach us at:
+      <a href="mailto:gustavo.tirapeguicortes@gmail.com">gustavo.tirapeguicortes@gmail.com</a>
+    </p>
+
+  </section>
+
+</main>
+
+<footer>
+  &copy; 2025 Pitwall &nbsp;·&nbsp;
+  <span id="footer-text">Política de Privacidad</span>
+</footer>
+
+<script>
+  function setLang(lang) {
+    document.getElementById('sec-es').classList.toggle('visible', lang === 'es');
+    document.getElementById('sec-en').classList.toggle('visible', lang === 'en');
+    document.getElementById('btn-es').classList.toggle('active', lang === 'es');
+    document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+    document.getElementById('footer-text').textContent =
+      lang === 'es' ? 'Política de Privacidad' : 'Privacy Policy';
+    document.documentElement.lang = lang;
+  }
+
+  // Auto-detect browser language on load
+  const preferEs = navigator.language && navigator.language.startsWith('es');
+  if (!preferEs) setLang('en');
+</script>
+
+</body>
+</html>
