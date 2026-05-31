@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, ScrollView,
-  StyleSheet,
+  StyleSheet, Pressable,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
@@ -59,8 +59,11 @@ export default function TimezoneModal({ isFirstUse = false }: Props) {
 
   return (
     <Modal transparent animationType="slide" visible statusBarTranslucent>
-      <View style={styles.backdrop}>
-        <View style={[styles.sheet, { backgroundColor: C.surface, borderColor: C.sep }]}>
+      <Pressable
+        style={styles.backdrop}
+        onPress={!isFirstUse ? () => setShowPicker(false) : undefined}
+      >
+        <Pressable style={[styles.sheet, { backgroundColor: C.surface, borderColor: C.sep }]} onPress={e => e.stopPropagation()}>
 
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: C.sep }]}>
@@ -133,8 +136,8 @@ export default function TimezoneModal({ isFirstUse = false }: Props) {
             </TouchableOpacity>
           </View>
 
-        </View>
-      </View>
+        </Pressable>
+      </Pressable>
     </Modal>
   );
 }
