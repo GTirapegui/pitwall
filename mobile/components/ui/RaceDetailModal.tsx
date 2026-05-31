@@ -306,7 +306,7 @@ export default function RaceDetailModal({ meeting, round, totalRounds, onClose }
                       marginHorizontal:4 },
                   ]}>
                     <Text style={[s.sessCode, { color: isRace ? C.red : C.muted }]}>{code}</Text>
-                    <Text style={[s.sessName, { color:C.ink, fontWeight: isRace ? '800':'600' }]}>{name}</Text>
+                    <Text style={[s.sessName, { color:C.ink, fontWeight: isRace ? '800':'600' }]} numberOfLines={1}>{name}</Text>
                     <Text style={[s.sessTime, { color: isRace ? C.red : C.ink2 }]}>
                       {dateStr} · {timeStr}
                     </Text>
@@ -463,10 +463,10 @@ const s = StyleSheet.create({
 
   // Sessions
   dsSess:   { borderRadius:12, borderWidth:1, overflow:'hidden' },
-  sessRow:  { flexDirection:'row', alignItems:'center', gap:10, padding:12, paddingHorizontal:14 },
-  sessCode: { fontFamily:SMB, fontSize:11, width:44 },
+  sessRow:  { flexDirection:'row', alignItems:'center', gap:10, padding:12, paddingHorizontal:14, flexWrap:'nowrap' },
+  sessCode: { fontFamily:SMB, fontSize:11, minWidth:44, flexShrink:0 },
   sessName: { fontFamily:A7, fontSize:15, flex:1 },
-  sessTime: { fontFamily:SMB, fontSize:12, textAlign:'right' },
+  sessTime: { fontFamily:SMB, fontSize:11, textAlign:'right', flexShrink:0 },
 
   // Stats grid
   dsStats:  { flexDirection:'row', flexWrap:'wrap', gap:1, borderRadius:12,

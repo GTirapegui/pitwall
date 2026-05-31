@@ -113,13 +113,20 @@ function DriverRow({
       <View style={s.main}>
         <View style={s.name}>
           <Text style={[s.firstName, { color: C.muted }]}>{driver.firstName}</Text>
-          <Text style={[s.lastName, { color: C.ink }]}>{driver.lastName.toUpperCase()}</Text>
+          <Text
+            style={[s.lastName, { color: C.ink }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+          >
+            {driver.lastName.toUpperCase()}
+          </Text>
         </View>
 
         {isLeader ? (
           <View style={[s.leadTag, { borderColor: `${gold}73` }]}>
             <View style={[s.leadDot, { backgroundColor: gold }]} />
-            <Text style={[s.leadTagTxt, { color: gold }]}>{t('standings.worldLeader')}</Text>
+            <Text style={[s.leadTagTxt, { color: gold }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('standings.worldLeader')}</Text>
           </View>
         ) : (
           <View style={s.teamRow}>
@@ -194,7 +201,14 @@ function ConstructorRow({
 
       {/* Main: flex 1 */}
       <View style={s.main}>
-        <Text style={[s.cname, { color: C.ink }]}>{ctor.teamName.toUpperCase()}</Text>
+        <Text
+          style={[s.cname, { color: C.ink }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}
+        >
+          {ctor.teamName.toUpperCase()}
+        </Text>
         <Text style={[s.cdrivers, { color: C.muted }]}>
           {(ctor.drivers ?? []).join(' · ')}
         </Text>
@@ -202,7 +216,7 @@ function ConstructorRow({
         {isLeader && (
           <View style={[s.leadTag, { borderColor: `${gold}73`, marginTop: 6 }]}>
             <View style={[s.leadDot, { backgroundColor: gold }]} />
-            <Text style={[s.leadTagTxt, { color: gold }]}>{t('standings.worldLeader')}</Text>
+            <Text style={[s.leadTagTxt, { color: gold }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{t('standings.worldLeader')}</Text>
           </View>
         )}
 
@@ -354,7 +368,7 @@ const s = StyleSheet.create({
   // Leader badge
   leadTag: { flexDirection: 'row', alignItems: 'center', gap: 5,
     borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2,
-    marginTop: 8, alignSelf: 'flex-start' },
+    marginTop: 8, alignSelf: 'flex-start', flexShrink: 1, flexWrap: 'wrap' },
   leadDot: { width: 5, height: 5, borderRadius: 3 },
   leadTagTxt: { fontFamily: SMB, fontSize: 9, letterSpacing: .14 * 9 },
 

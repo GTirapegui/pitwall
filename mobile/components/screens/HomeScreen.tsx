@@ -135,23 +135,33 @@ function DriverCard({
             backgroundSize: '6px 6px', opacity: 0.5,
           } as any]} />
         )}
+        {/* CAMBIAR at top — aligned end so it doesn't overlap body name */}
         <TouchableOpacity style={s.dcChange} onPress={onChangeTap}>
           <Text style={s.dcChangeTxt}>{t('home.change')}</Text>
         </TouchableOpacity>
-        <Text style={s.dcNum}>{driver.driverNumber ?? '—'}</Text>
-        <View style={s.dcFlag}>
-          <Image
-            source={{ uri: `https://flagcdn.com/w40/${flagCode}.png` }}
-            style={{ width: '100%', height: '100%' }}
-            resizeMode="cover"
-          />
+        <View style={s.dcBadgeContent}>
+          <Text style={s.dcNum}>{driver.driverNumber ?? '—'}</Text>
+          <View style={s.dcFlag}>
+            <Image
+              source={{ uri: `https://flagcdn.com/w40/${flagCode}.png` }}
+              style={{ width: '100%', height: '100%' }}
+              resizeMode="cover"
+            />
+          </View>
         </View>
       </View>
 
       {/* Body (flex 1) */}
       <View style={s.dcBody}>
         <Text style={[s.dcFirst, { color: C.muted }]}>{driver.firstName}</Text>
-        <Text style={[s.dcLast, { color: C.ink }]}>{driver.lastName.toUpperCase()}</Text>
+        <Text
+          style={[s.dcLast, { color: C.ink }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}
+        >
+          {driver.lastName.toUpperCase()}
+        </Text>
         <View style={s.dcTeam}>
           <View style={[s.teamDot, { backgroundColor: tc }]} />
           <Text style={[s.dcTeamName, { color: C.ink2 }]}>{driver.teamName}</Text>
@@ -320,7 +330,7 @@ function Top5Table({ drivers }: { drivers: any[] }) {
             <Image source={{ uri: `https://flagcdn.com/w20/${flagCode}.png` }}
               style={s.t5Flag} resizeMode="cover" />
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={[s.t5Name, { color: C.ink }]}>{d.lastName.toUpperCase()}</Text>
+              <Text style={[s.t5Name, { color: C.ink }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{d.lastName.toUpperCase()}</Text>
               <Text style={[s.t5Team, { color: C.muted }]}>{d.teamName}</Text>
             </View>
             <Text style={[s.t5Pts, { color: isLead ? C.gold : C.ink }]}>{d.points}</Text>
@@ -686,12 +696,13 @@ const s = StyleSheet.create({
   secRight: { fontFamily:SMB, fontSize:11, letterSpacing:.1 * 16 / 1 },
 
   // Driver card — grid 118px | flex
-  driverCard: { flexDirection:'row', borderRadius:18, overflow:'hidden', borderWidth:1 },
-  dcBadge:    { width:118, alignItems:'center', justifyContent:'center', gap:10, padding:18,
-    paddingHorizontal:10, position:'relative' },
-  dcChange:   { position:'absolute', top:12, right:12, zIndex:2,
+  driverCard:      { flexDirection:'row', borderRadius:18, overflow:'hidden', borderWidth:1 },
+  dcBadge:         { width:118, alignItems:'center', justifyContent:'flex-start',
+    paddingTop:10, paddingHorizontal:10, paddingBottom:12, position:'relative' },
+  dcChange:        { alignSelf:'flex-end', zIndex:2,
     backgroundColor:'rgba(0,0,0,.28)', borderWidth:1, borderColor:'rgba(255,255,255,.25)',
     borderRadius:999, paddingHorizontal:9, paddingVertical:5 },
+  dcBadgeContent:  { flex:1, alignItems:'center', justifyContent:'center', gap:8 },
   dcChangeTxt:{ fontFamily:SMB, fontSize:9, letterSpacing:.12 * 9, color:'#fff' },
   dcNum:      { fontFamily:A9, fontSize:54, color:'#fff', lineHeight:54*.8,
     letterSpacing:-.03*54 },

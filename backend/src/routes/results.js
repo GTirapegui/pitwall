@@ -280,7 +280,27 @@ router.get('/latest', async (req, res) => {
   }
 });
 
-// POST /api/results/:round/cache/clear — invalidate a cached round (requires CACHE_ADMIN_KEY header)
+// POST /api/results/cache/clear — invalidate ALL cached rounds for the current year
+router.post('/cache/clear', (req, res) => {
+  const adminKey = process.env.CACHE_ADMIN_KEY;
+  if (adminKey && req.headers['x-admin-key'] !== adminKey)
+    return res.status(401).json({ error: 'Unauthorized' });
+  const year = new Date().getFullYear();
+  const prefix = `results_round_${year}_`;
+  const cleared = [];
+  for (const key of cache.store.keys()) {
+    if (key.startsWith(prefix)) {
+      cache.delete(key);
+      cleared.push(key);
+    }
+  }
+  cache.delete(`results_latest_${year}`);
+  cleared.push(`results_latest_${year}`);
+  console.log(`[results] all round caches cleared: ${cleared.join(', ')}`);
+  res.json({ cleared });
+});
+
+// POST /api/results/:round/cache/clear — invalidate a single cached round
 router.post('/:round/cache/clear', (req, res) => {
   const adminKey = process.env.CACHE_ADMIN_KEY;
   if (adminKey && req.headers['x-admin-key'] !== adminKey)
@@ -355,7 +375,7 @@ router.get('/:round', async (req, res) => {
     if (!result)
       return res.json({ round: roundNum, message: 'Race data not yet available from OpenF1', results: null });
 
-    cache.set(cacheKey, result, 86400); // 24h — past race data never changes
+    cache.set(cacheKey, result, 21600); // 6h — gives time for driver data to populate post-race
     res.json(result);
   } catch (err) {
     console.error(`[results/${roundNum}]`, err.message);

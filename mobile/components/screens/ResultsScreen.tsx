@@ -118,7 +118,14 @@ function PodiumCol({
           <Image source={{ uri: `https://flagcdn.com/w40/${flagCode}.png` }}
             style={{ width: '100%', height: '100%' }} resizeMode="cover" />
         </View>
-        <Text style={[s.ppName, { color: C.ink }]}>{driver.lastName.toUpperCase()}</Text>
+        <Text
+          style={[s.ppName, { color: C.ink }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}
+        >
+          {driver.lastName.toUpperCase()}
+        </Text>
         <View style={s.ppTeam}>
           <View style={[s.ppTeamDot, { backgroundColor: tc }]} />
           <Text style={[s.ppTeamTxt, { color: C.muted }]}>{driver.teamName}</Text>
@@ -178,7 +185,7 @@ function ClassRow({
 
       {/* Name + team */}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={[s.cname, { color: C.ink }]} numberOfLines={1}>
+        <Text style={[s.cname, { color: C.ink }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
           {driver.lastName.toUpperCase()}
           <Text style={[s.cnameSmall, { color: C.muted }]}>  {driver.teamName}</Text>
         </Text>

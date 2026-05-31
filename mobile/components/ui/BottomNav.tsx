@@ -190,7 +190,14 @@ export default function BottomNav({ active, onPress }: Props) {
               </View>
 
               {/* Label */}
-              <Text style={[s.label, { color: iconColor }]}>{LABELS[tab]}</Text>
+              <Text
+                style={[s.label, { color: iconColor }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.5}
+              >
+                {LABELS[tab]}
+              </Text>
             </TouchableOpacity>
           );
         })}
@@ -204,7 +211,7 @@ const s = StyleSheet.create({
   pill:      { width: '100%', maxWidth: 520, flexDirection: 'row', borderRadius: 20, borderWidth: 1, overflow: 'hidden' },
   item:      { flex: 1, alignItems: 'center', paddingTop: 13, paddingBottom: 12, gap: 6, position: 'relative' },
   indicator: { position: 'absolute', top: 0, width: 24, height: 3, borderBottomLeftRadius: 3, borderBottomRightRadius: 3 },
-  label:     { fontFamily: SMB, fontSize: 8.5, letterSpacing: 1.2 },
+  label:     { fontFamily: SMB, fontSize: 8.5, letterSpacing: 0.5 },
   livePip:   { position: 'absolute', top: 0, right: -2, width: 6, height: 6, borderRadius: 3, backgroundColor: '#E10600' },
   // Tooltip
   tooltip:   { position: 'absolute', bottom: '100%', alignSelf: 'center',
