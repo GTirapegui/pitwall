@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, ScrollView,
-  StyleSheet, Platform,
+  StyleSheet,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { useTimezone } from '@/hooks/useTimezone';
 import { useI18n } from '@/context/I18nContext';
@@ -16,6 +17,7 @@ interface Props {
 export default function TimezoneModal({ isFirstUse = false }: Props) {
   const C = useColors();
   const { t } = useI18n();
+  const insets = useSafeAreaInsets();
   const { tz, showPicker, setShowPicker, setTz } = useTimezone();
   const [selected, setSelected] = useState(tz);
 
@@ -121,7 +123,7 @@ export default function TimezoneModal({ isFirstUse = false }: Props) {
           </ScrollView>
 
           {/* Confirm */}
-          <View style={[styles.footer, { borderTopColor: C.sep }]}>
+          <View style={[styles.footer, { borderTopColor: C.sep, paddingBottom: insets.bottom + 16 }]}>
             <TouchableOpacity
               style={[styles.confirmBtn, { backgroundColor: C.accent }]}
               onPress={confirm}
@@ -205,6 +207,7 @@ const styles = StyleSheet.create({
 
   footer: {
     padding: 16,
+    paddingBottom: 16,
     borderTopWidth: 1,
   },
   confirmBtn: {

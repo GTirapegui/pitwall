@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const cache = require('../cache/memoryCache');
 const { getMeetings, getSessions, get } = require('../services/openf1');
 const { buildAndCacheSchedule } = require('./schedule');
@@ -241,6 +242,83 @@ async function getYearData(year) {
   return data;
 }
 
+// ── Jolpica fallback — reliable historical race results ────────────────────────
+async function buildResultsFromJolpica(year, round, meeting, totalRounds) {
+  const url = `https://api.jolpi.ca/ergast/f1/${year}/${round}/results.json`;
+  let data;
+  try {
+    const resp = await axios.get(url, { timeout: 12000 });
+    data = resp.data;
+  } catch (err) {
+    console.warn(`[results/jolpica] round ${round}: ${err.message}`);
+    return null;
+  }
+
+  const race = data?.MRData?.RaceTable?.Races?.[0];
+  if (!race?.Results?.length) {
+    console.warn(`[results/jolpica] round ${round}: no results from Jolpica`);
+    return null;
+  }
+  console.log(`[results/jolpica] round ${round}: ${race.Results.length} entries`);
+
+  let fastestLapAbbreviation = null;
+  let fastestLapTime = null;
+
+  const results = race.Results.map(r => {
+    const pos          = parseInt(r.position, 10);
+    const abbreviation = r.Driver?.code ?? '???';
+    const teamName     = r.Constructor?.name ?? 'Unknown';
+    const isFastest    = r.FastestLap?.rank === '1';
+
+    if (isFastest) {
+      fastestLapAbbreviation = abbreviation;
+      fastestLapTime         = r.FastestLap?.Time?.time ?? null;
+    }
+
+    let gap = null;
+    if (pos > 1) {
+      const status = r.status ?? '';
+      if (r.Time?.time) {
+        // Jolpica gives "+12.345" — normalise to "+12.345s"
+        const t = r.Time.time;
+        gap = (t.startsWith('+') ? t : `+${t}`) + 's';
+      } else if (status.startsWith('+')) {
+        gap = status; // "+1 Lap", "+2 Laps"
+      } else if (status && status !== 'Finished') {
+        gap = status; // "Engine", "Collision", "DNF", etc.
+      }
+    }
+
+    return {
+      driverNumber: parseInt(r.number, 10) || 0,
+      abbreviation,
+      firstName: r.Driver?.givenName ?? '',
+      lastName:  r.Driver?.familyName ?? 'Unknown',
+      teamName,
+      teamColor: TEAM_COLORS[teamName] || '#8A8A8E',
+      flag:      DRIVER_FLAGS[abbreviation] || '🏳️',
+      position:  pos,
+      points:    parseFloat(r.points) || 0,
+      fastestLap: isFastest,
+      gap,
+    };
+  }).sort((a, b) => a.position - b.position);
+
+  return {
+    round,
+    totalRounds,
+    meetingName:            race.raceName ?? meeting?.meeting_name ?? '',
+    circuitShortName:       race.Circuit?.circuitName ?? meeting?.circuit_short_name ?? '',
+    countryName:            meeting?.country_name ?? '',
+    countryCode:            meeting?.country_code ?? '',
+    dateStart:              race.date ?? meeting?.date_start ?? '',
+    totalLaps:              parseInt(race.Results[0]?.laps, 10) || null,
+    fastestLapTime,
+    fastestLapAbbreviation,
+    results,
+  };
+}
+
 // GET /api/results/latest
 router.get('/latest', async (req, res) => {
   const year     = new Date().getFullYear();
@@ -350,13 +428,12 @@ router.get('/:round', async (req, res) => {
       .join(' | ');
     console.log(`[results/${roundNum}] sessions: ${sessionsSummary}`);
 
+    // Use dateStart as fallback when dateEnd is missing (some sessions lack it in OpenF1)
     const raceSessionEntry = scheduleMeeting.sessions.find(
-      s => s.sessionType === 'Race' && s.sessionName === 'Race' && new Date(s.dateEnd) < now
+      s => s.sessionType === 'Race' && s.sessionName === 'Race' &&
+           new Date(s.dateEnd || s.dateStart) < now
     );
-    console.log(`[results/${roundNum}] selected sessionKey: ${raceSessionEntry?.sessionKey ?? 'none (race not completed)'} (filter: sessionType=Race AND sessionName=Race)`);
-
-    if (!raceSessionEntry)
-      return res.json({ round: roundNum, results: null, message: 'Race not yet completed' });
+    console.log(`[results/${roundNum}] selected sessionKey: ${raceSessionEntry?.sessionKey ?? 'none'} (filter: sessionType=Race AND sessionName=Race)`);
 
     // Map camelCase schedule fields → snake_case for buildResultsForSession
     const meeting = {
@@ -369,11 +446,24 @@ router.get('/:round', async (req, res) => {
 
     const meetingSessions = yearData.sessions.filter(s => s.meeting_key === scheduleMeeting.meetingKey);
 
-    const result = await buildResultsForSession(
-      raceSessionEntry.sessionKey, roundNum, meeting, schedule.meetings, meetingSessions
-    );
+    let result = null;
+
+    if (raceSessionEntry) {
+      result = await buildResultsForSession(
+        raceSessionEntry.sessionKey, roundNum, meeting, schedule.meetings, meetingSessions
+      );
+      if (!result) console.warn(`[results/${roundNum}] OpenF1 returned no data — trying Jolpica`);
+    } else {
+      console.warn(`[results/${roundNum}] race session not found in schedule — trying Jolpica`);
+    }
+
+    // Jolpica fallback for historical rounds where OpenF1 has no data
+    if (!result) {
+      result = await buildResultsFromJolpica(year, roundNum, meeting, schedule.meetings.length);
+    }
+
     if (!result)
-      return res.json({ round: roundNum, message: 'Race data not yet available from OpenF1', results: null });
+      return res.json({ round: roundNum, message: 'Race data not yet available', results: null });
 
     cache.set(cacheKey, result, 21600); // 6h — gives time for driver data to populate post-race
     res.json(result);

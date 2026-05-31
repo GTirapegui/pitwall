@@ -252,7 +252,8 @@ export default function ResultsScreen() {
     setLoading(true);
     fetchRoundResults(selectedRound)
       .then(data => {
-        cache.current.set(selectedRound, data);
+        // Only cache if we got actual results — don't freeze empty responses
+        if (data?.results?.length > 0) cache.current.set(selectedRound, data);
         setResults(data);
       })
       .catch(() => setResults(null))
