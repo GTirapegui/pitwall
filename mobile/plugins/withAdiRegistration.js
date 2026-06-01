@@ -6,10 +6,10 @@ const withAdiRegistration = (config) => {
   return withDangerousMod(config, [
     'android',
     async (config) => {
-      const rawDir = path.join(config.modRequest.platformProjectRoot, 'app', 'src', 'main', 'res', 'raw');
-      fs.mkdirSync(rawDir, { recursive: true });
+      const assetsDir = path.join(config.modRequest.platformProjectRoot, 'app', 'src', 'main', 'assets');
+      fs.mkdirSync(assetsDir, { recursive: true });
       fs.writeFileSync(
-        path.join(rawDir, 'adi_registration.properties'),
+        path.join(assetsDir, 'adi-registration.properties'),
         'CQWBSLQJPDPJ2AAAAAAAAAAAAA'
       );
       return config;
