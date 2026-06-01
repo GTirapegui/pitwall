@@ -22,6 +22,13 @@
       "android": {
         "buildType": "app-bundle"
       }
+    },
+    "verification": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "credentialsSource": "local"
+      }
     }
   },
   "submit": {
