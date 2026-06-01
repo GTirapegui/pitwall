@@ -39,4 +39,3 @@ yarn-error.*
 # generated native folders
 /ios
 /android
-!/android/app/src/main/res/raw/adi_registration.properties
