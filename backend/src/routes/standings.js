@@ -1,10 +1,31 @@
 const express  = require('express');
 const router   = express.Router();
 const axios    = require('axios');
+const fs       = require('fs');
+const path     = require('path');
 const memCache = require('../cache/memoryCache');
 
 const JOLPICA_BASE = 'https://api.jolpi.ca/ergast/f1';
 const CACHE_TTL    = 1800; // 30 min — official standings only change after each race
+
+const FALLBACK_DIR = path.join(__dirname, '../../../cache');
+
+function readFallback(filename) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(FALLBACK_DIR, filename), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function writeFallback(filename, data) {
+  try {
+    if (!fs.existsSync(FALLBACK_DIR)) fs.mkdirSync(FALLBACK_DIR, { recursive: true });
+    fs.writeFileSync(path.join(FALLBACK_DIR, filename), JSON.stringify(data), 'utf8');
+  } catch (e) {
+    console.warn('[standings] fallback write failed:', e.message);
+  }
+}
 
 async function jolpica(path) {
   const { data } = await axios.get(`${JOLPICA_BASE}/${path}`, { timeout: 10000 });
@@ -77,11 +98,17 @@ router.get('/drivers', async (req, res) => {
     const standings = await buildDriverStandings(year);
     const result    = { season: year, standings };
     memCache.set(ck, result, CACHE_TTL);
+    writeFallback('standings-drivers.json', result);
     console.log(`[standings/drivers] ${standings.length} drivers cached`);
     res.json(result);
   } catch (err) {
-    console.error('[standings/drivers]', err.message);
-    res.status(502).json({ error: 'Failed to fetch driver standings', detail: err.message });
+    console.error('[standings/drivers] Jolpica failed:', err.message);
+    const stale = readFallback('standings-drivers.json');
+    if (stale) {
+      console.warn('[standings/drivers] serving stale fallback');
+      return res.set('X-Cache', 'stale').json(stale);
+    }
+    res.status(503).json({ error: 'Standings unavailable — Jolpica is down and no cached data exists' });
   }
 });
 
@@ -96,11 +123,17 @@ router.get('/constructors', async (req, res) => {
     const standings = await buildConstructorStandings(year);
     const result    = { season: year, standings };
     memCache.set(ck, result, CACHE_TTL);
+    writeFallback('standings-constructors.json', result);
     console.log(`[standings/constructors] ${standings.length} constructors cached`);
     res.json(result);
   } catch (err) {
-    console.error('[standings/constructors]', err.message);
-    res.status(502).json({ error: 'Failed to fetch constructor standings', detail: err.message });
+    console.error('[standings/constructors] Jolpica failed:', err.message);
+    const stale = readFallback('standings-constructors.json');
+    if (stale) {
+      console.warn('[standings/constructors] serving stale fallback');
+      return res.set('X-Cache', 'stale').json(stale);
+    }
+    res.status(503).json({ error: 'Standings unavailable — Jolpica is down and no cached data exists' });
   }
 });
 
@@ -117,8 +150,12 @@ async function warmUpStandings() {
       buildDriverStandings(year),
       buildConstructorStandings(year),
     ]);
-    memCache.set(drvKey, { season: year, standings: drivers },       CACHE_TTL);
-    memCache.set(conKey, { season: year, standings: constructors },  CACHE_TTL);
+    const drvResult = { season: year, standings: drivers };
+    const conResult = { season: year, standings: constructors };
+    memCache.set(drvKey, drvResult, CACHE_TTL);
+    memCache.set(conKey, conResult, CACHE_TTL);
+    writeFallback('standings-drivers.json', drvResult);
+    writeFallback('standings-constructors.json', conResult);
     console.log(`[warmup] standings ready — ${drivers.length} drivers, ${constructors.length} constructors`);
   } catch (err) {
     // Don't write stale/partial data — let the first request trigger a fresh fetch
