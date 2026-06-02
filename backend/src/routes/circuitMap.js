@@ -73,7 +73,7 @@ router.get('/:circuitKey', async (req, res) => {
     return res.status(404).json({ error: `Unknown circuit: ${circuitKey}` });
   }
 
-  const svgCacheKey = `circuit_map_v7_${circuitKey}`;
+  const svgCacheKey = `circuit_map_v8_${circuitKey}`;
   const cachedSvg = cache.get(svgCacheKey);
   if (cachedSvg) {
     res.setHeader('Content-Type', 'image/svg+xml');
@@ -144,7 +144,7 @@ async function fetchPoints(sessionKey, driverNumber) {
         const pts = allLoc
           .filter(p => {
             const t = new Date(p.date).getTime();
-            return t >= t0 && t <= t0 + dur + 2000 && p.x != null && p.y != null;
+            return t >= t0 && t <= t0 + dur + 500 && p.x != null && p.y != null;
           })
           .map(p => ({ x: p.x, y: p.y }));
         if (pts.length >= 30) return pts;
@@ -164,6 +164,26 @@ async function fetchPoints(sessionKey, driverNumber) {
 }
 
 // ── Point processing ──────────────────────────────────────────────────────────
+
+// Removes GPS spike points (outliers >8× the median consecutive step).
+// Confirmed cause of "lines that don't go anywhere": Monaco lap 3 had spikes
+// of 638, 300, 292, 260 units vs. a typical step of ~12 units.
+function filterSpikes(points) {
+  if (points.length < 5) return points;
+  const dists = [];
+  for (let i = 1; i < points.length; i++) {
+    dists.push(Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y));
+  }
+  const sorted = [...dists].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const threshold = median * 8;
+  const result = [points[0]];
+  for (let i = 1; i < points.length; i++) {
+    if (dists[i - 1] <= threshold) result.push(points[i]);
+  }
+  return result;
+}
+
 function deduplicate(points, minDist = 1.5) {
   if (points.length === 0) return points;
   const result = [points[0]];
@@ -200,17 +220,15 @@ function rdpSimplify(pts, epsilon) {
 function chaikin(points, iterations = 3) {
   let pts = points;
   for (let iter = 0; iter < iterations; iter++) {
-    const n = pts.length;
     const smoothed = [];
-    for (let i = 0; i < n; i++) {
-      const next = pts[(i + 1) % n]; // wrap around for closed-loop circuits
+    for (let i = 0; i < pts.length - 1; i++) {
       smoothed.push({
-        x: 0.75 * pts[i].x + 0.25 * next.x,
-        y: 0.75 * pts[i].y + 0.25 * next.y,
+        x: 0.75 * pts[i].x + 0.25 * pts[i + 1].x,
+        y: 0.75 * pts[i].y + 0.25 * pts[i + 1].y,
       });
       smoothed.push({
-        x: 0.25 * pts[i].x + 0.75 * next.x,
-        y: 0.25 * pts[i].y + 0.75 * next.y,
+        x: 0.25 * pts[i].x + 0.75 * pts[i + 1].x,
+        y: 0.25 * pts[i].y + 0.75 * pts[i + 1].y,
       });
     }
     pts = smoothed;
@@ -236,16 +254,11 @@ function normalize(points, W, H, PAD) {
 
 function pointsToPath(points) {
   if (points.length < 2) return '';
-  const n = points.length;
-  // Start at midpoint between last and first so the closed loop has no seam
-  const sx = ((points[n - 1].x + points[0].x) / 2).toFixed(1);
-  const sy = ((points[n - 1].y + points[0].y) / 2).toFixed(1);
-  let d = `M ${sx} ${sy}`;
-  for (let i = 0; i < n; i++) {
-    const next = points[(i + 1) % n];
-    const ex = ((points[i].x + next.x) / 2).toFixed(1);
-    const ey = ((points[i].y + next.y) / 2).toFixed(1);
-    d += ` Q ${points[i].x.toFixed(1)} ${points[i].y.toFixed(1)} ${ex} ${ey}`;
+  let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+  for (let i = 1; i < points.length - 2; i++) {
+    const cpx = ((points[i].x + points[i + 1].x) / 2).toFixed(1);
+    const cpy = ((points[i].y + points[i + 1].y) / 2).toFixed(1);
+    d += ` Q ${points[i].x.toFixed(1)} ${points[i].y.toFixed(1)} ${cpx} ${cpy}`;
   }
   d += ' Z';
   return d;
@@ -253,9 +266,10 @@ function pointsToPath(points) {
 
 function buildSvg(rawPoints) {
   const W = 400, H = 280, PAD = 30;
-  const deduped    = deduplicate(rawPoints, 1.5);
+  const filtered   = filterSpikes(rawPoints);      // remove GPS outlier spikes first
+  const deduped    = deduplicate(filtered, 1.5);
   const normed     = normalize(deduped, W, H, PAD);
-  const simplified = rdpSimplify(normed, 2.5); // remove GPS noise before smoothing
+  const simplified = rdpSimplify(normed, 2.5);
   const clean      = deduplicate(simplified, 2);
   const smoothed   = chaikin(clean, 3);
   const pathD      = pointsToPath(smoothed);
