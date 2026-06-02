@@ -73,7 +73,7 @@ router.get('/:circuitKey', async (req, res) => {
     return res.status(404).json({ error: `Unknown circuit: ${circuitKey}` });
   }
 
-  const svgCacheKey = `circuit_map_v3_${circuitKey}`;
+  const svgCacheKey = `circuit_map_v4_${circuitKey}`;
   const cachedSvg = cache.get(svgCacheKey);
   if (cachedSvg) {
     res.setHeader('Content-Type', 'image/svg+xml');
@@ -151,19 +151,41 @@ async function fetchCleanLap(sessionKey, driverNumber) {
   }
 }
 
-// ── Fallback: all session location data, heavily downsampled ─────────────────
+// ── Fallback: first lap of session location data, downsampled ────────────────
 async function fetchRawLocation(sessionKey, driverNumber) {
   try {
     const data = await get('/location', { session_key: sessionKey, driver_number: driverNumber });
     if (!Array.isArray(data) || data.length === 0) return null;
-    // Keep every 12th point to reduce noise while preserving shape
-    return data
+    // Keep every 12th point, then cut to ~one lap to avoid overlapping traces
+    const sampled = data
       .filter((_, i) => i % 12 === 0)
       .map(p => ({ x: p.x, y: p.y }))
       .filter(p => p.x != null && p.y != null);
+    return sliceOneLap(sampled);
   } catch {
     return null;
   }
+}
+
+// Truncates a GPS point array to approximately one lap by detecting when the
+// path returns close to the starting position. Without this, multi-lap session
+// data causes the circuit shape to be drawn repeatedly with slight GPS offsets,
+// producing visible overlapping lines in the SVG output.
+function sliceOneLap(points) {
+  if (points.length < 30) return points;
+  const sx = points[0].x, sy = points[0].y;
+  const xs = points.map(p => p.x), ys = points.map(p => p.y);
+  const spread = Math.max(
+    Math.max(...xs) - Math.min(...xs),
+    Math.max(...ys) - Math.min(...ys),
+  ) || 100;
+  const threshold = spread * 0.06;
+  const minIdx = Math.floor(points.length * 0.15);
+  for (let i = minIdx; i < points.length; i++) {
+    const dx = points[i].x - sx, dy = points[i].y - sy;
+    if (Math.sqrt(dx * dx + dy * dy) < threshold) return points.slice(0, i + 1);
+  }
+  return points;
 }
 
 // ── Point processing ──────────────────────────────────────────────────────────
