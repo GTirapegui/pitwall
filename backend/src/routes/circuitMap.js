@@ -73,7 +73,7 @@ router.get('/:circuitKey', async (req, res) => {
     return res.status(404).json({ error: `Unknown circuit: ${circuitKey}` });
   }
 
-  const svgCacheKey = `circuit_map_v4_${circuitKey}`;
+  const svgCacheKey = `circuit_map_v6_${circuitKey}`;
   const cachedSvg = cache.get(svgCacheKey);
   if (cachedSvg) {
     res.setHeader('Content-Type', 'image/svg+xml');
@@ -201,18 +201,41 @@ function deduplicate(points, minDist = 1.5) {
   return result;
 }
 
+// Ramer-Douglas-Peucker: removes GPS noise while preserving corner shape
+function rdpSimplify(pts, epsilon) {
+  if (pts.length <= 2) return pts;
+  const first = pts[0], last = pts[pts.length - 1];
+  const dx = last.x - first.x, dy = last.y - first.y;
+  const len = Math.hypot(dx, dy);
+  let maxDist = 0, idx = 0;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const dist = len < 1e-10
+      ? Math.hypot(pts[i].x - first.x, pts[i].y - first.y)
+      : Math.abs(dy * pts[i].x - dx * pts[i].y + last.x * first.y - last.y * first.x) / len;
+    if (dist > maxDist) { maxDist = dist; idx = i; }
+  }
+  if (maxDist > epsilon) {
+    const l = rdpSimplify(pts.slice(0, idx + 1), epsilon);
+    const r = rdpSimplify(pts.slice(idx), epsilon);
+    return [...l.slice(0, -1), ...r];
+  }
+  return [first, last];
+}
+
 function chaikin(points, iterations = 3) {
   let pts = points;
   for (let iter = 0; iter < iterations; iter++) {
+    const n = pts.length;
     const smoothed = [];
-    for (let i = 0; i < pts.length - 1; i++) {
+    for (let i = 0; i < n; i++) {
+      const next = pts[(i + 1) % n]; // wrap around for closed-loop circuits
       smoothed.push({
-        x: 0.75 * pts[i].x + 0.25 * pts[i + 1].x,
-        y: 0.75 * pts[i].y + 0.25 * pts[i + 1].y,
+        x: 0.75 * pts[i].x + 0.25 * next.x,
+        y: 0.75 * pts[i].y + 0.25 * next.y,
       });
       smoothed.push({
-        x: 0.25 * pts[i].x + 0.75 * pts[i + 1].x,
-        y: 0.25 * pts[i].y + 0.75 * pts[i + 1].y,
+        x: 0.25 * pts[i].x + 0.75 * next.x,
+        y: 0.25 * pts[i].y + 0.75 * next.y,
       });
     }
     pts = smoothed;
@@ -232,17 +255,22 @@ function normalize(points, W, H, PAD) {
   const offsetY = PAD + ((H - PAD * 2) - rangeY * scale) / 2;
   return points.map(p => ({
     x: (p.x - minX) * scale + offsetX,
-    y: (p.y - minY) * scale + offsetY,
+    y: H - ((p.y - minY) * scale + offsetY), // flip Y: GPS Y increases up, SVG Y increases down
   }));
 }
 
 function pointsToPath(points) {
   if (points.length < 2) return '';
-  let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
-  for (let i = 1; i < points.length - 2; i++) {
-    const cpx = ((points[i].x + points[i + 1].x) / 2).toFixed(1);
-    const cpy = ((points[i].y + points[i + 1].y) / 2).toFixed(1);
-    d += ` Q ${points[i].x.toFixed(1)} ${points[i].y.toFixed(1)} ${cpx} ${cpy}`;
+  const n = points.length;
+  // Start at midpoint between last and first so the closed loop has no seam
+  const sx = ((points[n - 1].x + points[0].x) / 2).toFixed(1);
+  const sy = ((points[n - 1].y + points[0].y) / 2).toFixed(1);
+  let d = `M ${sx} ${sy}`;
+  for (let i = 0; i < n; i++) {
+    const next = points[(i + 1) % n];
+    const ex = ((points[i].x + next.x) / 2).toFixed(1);
+    const ey = ((points[i].y + next.y) / 2).toFixed(1);
+    d += ` Q ${points[i].x.toFixed(1)} ${points[i].y.toFixed(1)} ${ex} ${ey}`;
   }
   d += ' Z';
   return d;
@@ -250,11 +278,12 @@ function pointsToPath(points) {
 
 function buildSvg(rawPoints) {
   const W = 400, H = 280, PAD = 30;
-  const deduped  = deduplicate(rawPoints, 1.5);
-  const normed   = normalize(deduped, W, H, PAD);
-  const clean    = deduplicate(normed, 2);
-  const smoothed = chaikin(clean, 3);
-  const pathD    = pointsToPath(smoothed);
+  const deduped    = deduplicate(rawPoints, 1.5);
+  const normed     = normalize(deduped, W, H, PAD);
+  const simplified = rdpSimplify(normed, 2.5); // remove GPS noise before smoothing
+  const clean      = deduplicate(simplified, 2);
+  const smoothed   = chaikin(clean, 3);
+  const pathD      = pointsToPath(smoothed);
 
   const p0 = smoothed[0];
   const p1 = smoothed[1] || { x: p0.x + 1, y: p0.y };
@@ -265,8 +294,8 @@ function buildSvg(rawPoints) {
   const sfY2 = (p0.y - Math.sin(perp) * 6).toFixed(1);
 
   return `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
-  <path d="${pathD}" fill="none" stroke="#E10600" stroke-width="10" stroke-opacity="0.12" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="${pathD}" fill="none" stroke="#E10600" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="${pathD}" fill="none" stroke="#E10600" stroke-width="6" stroke-opacity="0.10" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="${pathD}" fill="none" stroke="#E10600" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
   <line x1="${sfX1}" y1="${sfY1}" x2="${sfX2}" y2="${sfY2}" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
 </svg>`;
 }
