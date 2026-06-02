@@ -27,6 +27,14 @@ class MemoryCache {
   clear() {
     this.store.clear();
   }
+
+  deleteByPrefix(prefix) {
+    let count = 0;
+    for (const key of this.store.keys()) {
+      if (key.startsWith(prefix)) { this.store.delete(key); count++; }
+    }
+    return count;
+  }
 }
 
 module.exports = new MemoryCache();

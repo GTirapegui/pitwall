@@ -34,6 +34,13 @@ const CIRCUIT_LAYOUT = {
 const SVG_BASE = 'https://raw.githubusercontent.com/julesr0y/f1-circuits-svg/main/circuits/minimal/black';
 const CACHE_TTL = 86400 * 7; // 7 days — static assets don't change
 
+// POST /api/circuit-map/cache/clear
+router.post('/cache/clear', (req, res) => {
+  const count = cache.deleteByPrefix('circuit_static_v1_');
+  console.log(`[circuit-map] cache cleared — ${count} entries removed`);
+  res.json({ cleared: count });
+});
+
 // GET /api/circuit-map/:circuitKey
 router.get('/:circuitKey', async (req, res) => {
   const { circuitKey } = req.params;
