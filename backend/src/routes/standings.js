@@ -6,7 +6,7 @@ const path     = require('path');
 const memCache = require('../cache/memoryCache');
 
 const JOLPICA_BASE = 'https://api.jolpi.ca/ergast/f1';
-const CACHE_TTL    = 1800; // 30 min — official standings only change after each race
+const CACHE_TTL    = 86400; // 24 h — standings only change after each race; long TTL keeps data during Jolpica outages
 
 const FALLBACK_DIR = path.join(__dirname, '../../../cache');
 
