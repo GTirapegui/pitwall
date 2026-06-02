@@ -73,7 +73,7 @@ router.get('/:circuitKey', async (req, res) => {
     return res.status(404).json({ error: `Unknown circuit: ${circuitKey}` });
   }
 
-  const svgCacheKey = `circuit_map_v6_${circuitKey}`;
+  const svgCacheKey = `circuit_map_v7_${circuitKey}`;
   const cachedSvg = cache.get(svgCacheKey);
   if (cachedSvg) {
     res.setHeader('Content-Type', 'image/svg+xml');
@@ -91,18 +91,11 @@ router.get('/:circuitKey', async (req, res) => {
     let points = null;
 
     for (const dnum of DRIVERS) {
-      // Try clean single-lap first (best quality)
-      points = await fetchCleanLap(sessionKey, dnum);
-      if (points && points.length >= 80) break;
-
-      // Fall back to raw session data for this driver
-      if (!points || points.length < 80) {
-        const raw = await fetchRawLocation(sessionKey, dnum);
-        if (raw && raw.length >= 80) { points = raw; break; }
-      }
+      points = await fetchPoints(sessionKey, dnum);
+      if (points && points.length >= 20) break;
     }
 
-    if (!points || points.length < 50) {
+    if (!points || points.length < 20) {
       console.warn(`[circuit-map] ${circuitKey}: insufficient points (${points?.length ?? 0})`);
       return res.status(502).json({ error: 'Insufficient GPS data for circuit' });
     }
@@ -119,73 +112,55 @@ router.get('/:circuitKey', async (req, res) => {
   }
 });
 
-// ── Fetch one clean lap of GPS points ────────────────────────────────────────
-async function fetchCleanLap(sessionKey, driverNumber) {
+// ── Fetch GPS points for exactly one lap ─────────────────────────────────────
+// Fetches laps + location in parallel (one API round-trip per driver).
+// Uses lap timestamps to isolate exactly one lap from the location stream.
+// This is the only safe way to avoid multi-lap overlapping traces: the
+// location stream for a full P1 session contains 10-20 laps at slightly
+// different GPS offsets, which render as visually overlapping lines.
+//
+// Priority: lap 3 → lap 4 → lap 2 → any lap after 1 → fixed raw slice.
+async function fetchPoints(sessionKey, driverNumber) {
   try {
-    const laps = await get('/laps', { session_key: sessionKey, driver_number: driverNumber });
-    if (!Array.isArray(laps) || laps.length < 3) return null;
+    const [laps, allLoc] = await Promise.all([
+      get('/laps',     { session_key: sessionKey, driver_number: driverNumber }),
+      get('/location', { session_key: sessionKey, driver_number: driverNumber }),
+    ]);
 
-    // Skip outlap (lap 1); prefer lap 4 > lap 3 > any lap after 2
-    const targetLap =
-      laps.find(l => l.lap_number === 4) ||
-      laps.find(l => l.lap_number === 3) ||
-      laps.find(l => l.lap_number > 2);
-    if (!targetLap?.date_start) return null;
-
-    const lapStart  = new Date(targetLap.date_start).getTime();
-    const durationMs = (targetLap.lap_duration ?? 130) * 1000;
-    const lapEnd    = lapStart + durationMs + 3000;
-
-    const allLoc = await get('/location', { session_key: sessionKey, driver_number: driverNumber });
     if (!Array.isArray(allLoc) || allLoc.length === 0) return null;
 
-    const lapPoints = allLoc.filter(p => {
-      const t = new Date(p.date).getTime();
-      return t >= lapStart && t <= lapEnd && p.x != null && p.y != null;
-    });
+    // Use lap timing to slice exactly one lap out of the location stream
+    if (Array.isArray(laps) && laps.length >= 2) {
+      const PREFERRED = [3, 4, 2];
+      const candidates = [
+        ...PREFERRED.map(n => laps.find(l => l.lap_number === n)),
+        laps.find(l => l.lap_number > 1 && !PREFERRED.includes(l.lap_number)),
+      ].filter(Boolean);
 
-    if (lapPoints.length < 50) return null;
-    return lapPoints.map(p => ({ x: p.x, y: p.y }));
-  } catch {
-    return null;
-  }
-}
+      for (const lap of candidates) {
+        if (!lap?.date_start) continue;
+        const t0  = new Date(lap.date_start).getTime();
+        const dur = (lap.lap_duration ?? 130) * 1000;
+        const pts = allLoc
+          .filter(p => {
+            const t = new Date(p.date).getTime();
+            return t >= t0 && t <= t0 + dur + 2000 && p.x != null && p.y != null;
+          })
+          .map(p => ({ x: p.x, y: p.y }));
+        if (pts.length >= 30) return pts;
+      }
+    }
 
-// ── Fallback: first lap of session location data, downsampled ────────────────
-async function fetchRawLocation(sessionKey, driverNumber) {
-  try {
-    const data = await get('/location', { session_key: sessionKey, driver_number: driverNumber });
-    if (!Array.isArray(data) || data.length === 0) return null;
-    // Keep every 12th point, then cut to ~one lap to avoid overlapping traces
-    const sampled = data
-      .filter((_, i) => i % 12 === 0)
+    // Last resort: skip pit lane exit (~50 pts at ~3.7 Hz) then take a fixed
+    // window of ~480 points ≈ one lap. Never use the full session stream.
+    const pts = allLoc
+      .slice(50, 530)
       .map(p => ({ x: p.x, y: p.y }))
       .filter(p => p.x != null && p.y != null);
-    return sliceOneLap(sampled);
+    return pts.length >= 20 ? pts : null;
   } catch {
     return null;
   }
-}
-
-// Truncates a GPS point array to approximately one lap by detecting when the
-// path returns close to the starting position. Without this, multi-lap session
-// data causes the circuit shape to be drawn repeatedly with slight GPS offsets,
-// producing visible overlapping lines in the SVG output.
-function sliceOneLap(points) {
-  if (points.length < 30) return points;
-  const sx = points[0].x, sy = points[0].y;
-  const xs = points.map(p => p.x), ys = points.map(p => p.y);
-  const spread = Math.max(
-    Math.max(...xs) - Math.min(...xs),
-    Math.max(...ys) - Math.min(...ys),
-  ) || 100;
-  const threshold = spread * 0.06;
-  const minIdx = Math.floor(points.length * 0.15);
-  for (let i = minIdx; i < points.length; i++) {
-    const dx = points[i].x - sx, dy = points[i].y - sy;
-    if (Math.sqrt(dx * dx + dy * dy) < threshold) return points.slice(0, i + 1);
-  }
-  return points;
 }
 
 // ── Point processing ──────────────────────────────────────────────────────────
