@@ -1,7 +1,8 @@
-const express = require('express');
-const router = express.Router();
-const cache = require('../cache/memoryCache');
-const { get } = require('../services/openf1');
+const express   = require('express');
+const router    = express.Router();
+const cache     = require('../cache/memoryCache');
+const fileCache = require('../cache/fileCache');
+const { get }   = require('../services/openf1');
 
 // ── OpenF1 circuit_short_name candidates per circuit key ─────────────────────
 // Multiple names tried in order because OpenF1 uses different values over years.
@@ -32,11 +33,19 @@ const CIRCUIT_NAMES = {
   villeneuve:    ['Montreal', 'Gilles Villeneuve'],
 };
 
-// ── Find a valid P1 session key from OpenF1 (cached 7 days) ──────────────────
+// ── Find a valid P1 session key from OpenF1 (persisted to disk — never changes) ──
 async function findSessionKey(circuitKey) {
-  const cacheKey = `session_key_v2_${circuitKey}`;
-  const hit = cache.get(cacheKey);
-  if (hit) return hit;
+  const memKey  = `session_key_v2_${circuitKey}`;
+  const fileKey = `session_key_${circuitKey}`;
+
+  const inMem = cache.get(memKey);
+  if (inMem) return inMem;
+
+  const onDisk = fileCache.get(fileKey);
+  if (onDisk) {
+    cache.set(memKey, onDisk, 86400 * 7);
+    return onDisk;
+  }
 
   const names = CIRCUIT_NAMES[circuitKey];
   if (!names) return null;
@@ -52,7 +61,8 @@ async function findSessionKey(circuitKey) {
         if (Array.isArray(sessions) && sessions.length > 0) {
           const key = sessions[0].session_key;
           console.log(`[circuit-map] ${circuitKey}: found session ${key} (${name} ${year} P1)`);
-          cache.set(cacheKey, key, 86400 * 7);
+          cache.set(memKey, key, 86400 * 7);
+          fileCache.set(fileKey, key, 365 * 24 * 3600); // permanent — historical keys never change
           return key;
         }
       } catch {
@@ -73,9 +83,12 @@ router.get('/:circuitKey', async (req, res) => {
     return res.status(404).json({ error: `Unknown circuit: ${circuitKey}` });
   }
 
-  const svgCacheKey = `circuit_map_v8_${circuitKey}`;
-  const cachedSvg = cache.get(svgCacheKey);
+  const svgMemKey  = `circuit_map_v8_${circuitKey}`;
+  const svgFileKey = `circuit_svg_${circuitKey}`;
+
+  const cachedSvg = cache.get(svgMemKey) ?? fileCache.get(svgFileKey);
   if (cachedSvg) {
+    if (!cache.get(svgMemKey)) cache.set(svgMemKey, cachedSvg, 86400);
     res.setHeader('Content-Type', 'image/svg+xml');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     return res.send(cachedSvg);
@@ -101,7 +114,8 @@ router.get('/:circuitKey', async (req, res) => {
     }
 
     const svg = buildSvg(points);
-    cache.set(svgCacheKey, svg, 86400);
+    cache.set(svgMemKey, svg, 86400);
+    fileCache.set(svgFileKey, svg, 365 * 24 * 3600); // permanent — GPS data never changes
 
     res.setHeader('Content-Type', 'image/svg+xml');
     res.setHeader('Cache-Control', 'public, max-age=86400');

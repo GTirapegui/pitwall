@@ -406,36 +406,20 @@ router.get('/:round', async (req, res) => {
   try {
     const [schedule, yearData] = await Promise.all([
       buildAndCacheSchedule(year),
-      getYearData(year),
+      getYearData(year).catch(() => null), // OpenF1 may be blocked during live sessions
     ]);
 
-    if (!schedule || !yearData)
-      return res.status(503).json({ error: 'OpenF1 unavailable', results: null });
+    if (!schedule)
+      return res.status(503).json({ error: 'Schedule unavailable', results: null });
 
     const now = new Date();
 
     const scheduleMeeting = schedule.meetings.find(m => m.round === roundNum);
-    console.log(`[results/${roundNum}] meeting: ${scheduleMeeting?.meetingName ?? 'NOT FOUND'} | isCancelled: ${scheduleMeeting?.isCancelled ?? false}`);
-
     if (!scheduleMeeting)
       return res.status(404).json({ error: 'Round not found' });
-
     if (scheduleMeeting.isCancelled)
       return res.status(404).json({ error: 'Race cancelled' });
 
-    const sessionsSummary = scheduleMeeting.sessions
-      .map(s => `${s.sessionName}(key=${s.sessionKey},type=${s.sessionType})`)
-      .join(' | ');
-    console.log(`[results/${roundNum}] sessions: ${sessionsSummary}`);
-
-    // Use dateStart as fallback when dateEnd is missing (some sessions lack it in OpenF1)
-    const raceSessionEntry = scheduleMeeting.sessions.find(
-      s => s.sessionType === 'Race' && s.sessionName === 'Race' &&
-           new Date(s.dateEnd || s.dateStart) < now
-    );
-    console.log(`[results/${roundNum}] selected sessionKey: ${raceSessionEntry?.sessionKey ?? 'none'} (filter: sessionType=Race AND sessionName=Race)`);
-
-    // Map camelCase schedule fields → snake_case for buildResultsForSession
     const meeting = {
       meeting_name:       scheduleMeeting.meetingName,
       circuit_short_name: scheduleMeeting.circuitShortName,
@@ -444,20 +428,24 @@ router.get('/:round', async (req, res) => {
       date_start:         scheduleMeeting.dateStart,
     };
 
-    const meetingSessions = yearData.sessions.filter(s => s.meeting_key === scheduleMeeting.meetingKey);
-
     let result = null;
 
-    if (raceSessionEntry) {
-      result = await buildResultsForSession(
-        raceSessionEntry.sessionKey, roundNum, meeting, schedule.meetings, meetingSessions
+    // Try OpenF1 only when yearData is available and session has a real key
+    if (yearData) {
+      const meetingSessions = yearData.sessions.filter(s => s.meeting_key === scheduleMeeting.meetingKey);
+      const raceSessionEntry = scheduleMeeting.sessions.find(
+        s => s.sessionType === 'Race' && s.sessionName === 'Race' &&
+             s.sessionKey && new Date(s.dateEnd || s.dateStart) < now
       );
-      if (!result) console.warn(`[results/${roundNum}] OpenF1 returned no data — trying Jolpica`);
-    } else {
-      console.warn(`[results/${roundNum}] race session not found in schedule — trying Jolpica`);
+      if (raceSessionEntry?.sessionKey) {
+        result = await buildResultsForSession(
+          raceSessionEntry.sessionKey, roundNum, meeting, schedule.meetings, meetingSessions
+        );
+        if (!result) console.warn(`[results/${roundNum}] OpenF1 returned no data — trying Jolpica`);
+      }
     }
 
-    // Jolpica fallback for historical rounds where OpenF1 has no data
+    // Jolpica fallback — works independently of OpenF1
     if (!result) {
       result = await buildResultsFromJolpica(year, roundNum, meeting, schedule.meetings.length);
     }
@@ -465,7 +453,7 @@ router.get('/:round', async (req, res) => {
     if (!result)
       return res.json({ round: roundNum, message: 'Race data not yet available', results: null });
 
-    cache.set(cacheKey, result, 21600); // 6h — gives time for driver data to populate post-race
+    cache.set(cacheKey, result, 21600);
     res.json(result);
   } catch (err) {
     console.error(`[results/${roundNum}]`, err.message);
