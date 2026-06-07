@@ -1,19 +1,12 @@
-/**
- * LiveScreen — real-time timing tower via OpenF1
- * Uses useLiveStatus (60 s) + useLiveData (4 s) SWR hooks.
- */
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, Animated, Platform,
+  View, Text, StyleSheet, Animated, Platform,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useColors } from '@/hooks/useColors';
 import { useNextEvent } from '@/hooks/useNextEvent';
 import { useTimezone, formatInTz } from '@/hooks/useTimezone';
 import { useLiveStatus } from '@/hooks/useLiveStatus';
-import { useLiveData, LiveDriver } from '@/hooks/useLiveData';
 import { useI18n } from '@/context/I18nContext';
-import F1Loader from '@/components/ui/F1Loader';
 
 const A9  = 'Archivo_900Black';
 const A8  = 'Archivo_800ExtraBold';
@@ -191,134 +184,37 @@ function EmptyState() {
   );
 }
 
+// ── Coming soon (live race, timing unavailable) ───────────────────────────────
+function ComingSoonState({ raceName }: { raceName: string }) {
+  const C = useColors();
+  return (
+    <View style={[s.emptyWrap, { backgroundColor: C.paper }]}>
+      <View style={[s.emptyIcon, { borderColor: RED }]}>
+        <Text style={{ fontSize: 32 }}>🏁</Text>
+      </View>
+      <Text style={[s.emptyTitle, { color: C.ink }]}>PRÓXIMAMENTE</Text>
+      <Text style={[s.emptySub, { color: C.muted }]}>
+        El timing en vivo estará disponible en una próxima versión.
+      </Text>
+      <View style={[s.nextCard, { backgroundColor: C.surface, borderColor: RED }]}>
+        <Text style={[s.nextLbl, { color: C.muted }]}>CARRERA EN CURSO</Text>
+        <Text style={[s.nextGP, { color: C.ink }]}>{raceName}</Text>
+        <LiveBadge />
+      </View>
+    </View>
+  );
+}
+
 // ── Main screen ───────────────────────────────────────────────────────────────
 export default function LiveScreen() {
-  const C = useColors();
-  const { t } = useI18n();
-
-  // Status (60 s poll, shared across app)
   const { isLive, session } = useLiveStatus();
 
-  // High-freq data (4 s poll, only when live)
-  const { standings, isValidating, updatedAt } = useLiveData(
-    isLive && session ? session.sessionKey : null
-  );
-
-  // Track age of last update for freshness dot
-  const [ageMs, setAgeMs] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => {
-      setAgeMs(updatedAt ? Date.now() - updatedAt : 999_999);
-    }, 500);
-    return () => clearInterval(id);
-  }, [updatedAt]);
-
-  // Previous positions for change arrows
-  const prevPositions = useRef<Map<number, number>>(new Map());
-  useEffect(() => {
-    if (standings.length === 0) return;
-    // After render, store current positions as "previous"
-    const timer = setTimeout(() => {
-      const next = new Map<number, number>();
-      standings.forEach(d => next.set(d.driverNumber, d.position));
-      prevPositions.current = next;
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [standings]);
-
-  // Track which rows just received fresh data (for flash highlight)
-  const prevStandings = useRef<LiveDriver[]>([]);
-  const [highlightedDrivers, setHighlightedDrivers] = useState<Set<number>>(new Set());
-  useEffect(() => {
-    if (standings.length === 0) return;
-    const changed = new Set<number>();
-    standings.forEach(d => {
-      const prev = prevStandings.current.find(p => p.driverNumber === d.driverNumber);
-      if (!prev || prev.gap !== d.gap || prev.position !== d.position) {
-        changed.add(d.driverNumber);
-      }
-    });
-    prevStandings.current = standings;
-    if (changed.size > 0) {
-      setHighlightedDrivers(changed);
-      const t = setTimeout(() => setHighlightedDrivers(new Set()), 1_000);
-      return () => clearTimeout(t);
-    }
-  }, [standings]);
-
-  // Empty state
   if (!isLive) return <EmptyState />;
 
-  const gpName   = (session?.gp ?? '').replace('FORMULA 1','').replace(/\d{4}$/,'').trim();
+  const gpName   = (session?.gp ?? '').replace('FORMULA 1', '').replace(/\d{4}$/, '').trim();
   const sessName = session?.name ?? '—';
 
-  return (
-    <ScrollView
-      style={[s.scroll, { backgroundColor: C.paper }]}
-      contentContainerStyle={s.content}
-      showsVerticalScrollIndicator={false}
-    >
-      {/* Hero */}
-      <View style={[s.hero,
-        Platform.OS==='web'
-          ?{boxShadow:'0 22px 54px -30px rgba(225,6,0,.5)'} as any
-          :{shadowColor:RED,shadowOpacity:.45,shadowRadius:24,shadowOffset:{width:0,height:10},elevation:18} as any,
-      ]}>
-        <LinearGradient colors={['#1a1a22','#0c0c11']}
-          start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill}/>
-        <View style={{position:'relative',zIndex:1}}>
-          <View style={s.heroTop}>
-            <LiveBadge />
-            <Text style={s.heroSession}>{sessName.toUpperCase()}</Text>
-          </View>
-          <Text style={s.heroGP}>{gpName.toUpperCase()}</Text>
-          {session?.circuitShort && (
-            <Text style={s.heroCircuit}>{session.circuitShort}</Text>
-          )}
-
-          {/* Freshness status */}
-          <View style={s.freshRow}>
-            <FreshnessDot ageMs={ageMs} />
-            <Text style={s.freshTxt}>
-              {updatedAt
-                ? t('live.updatedAgo', { n: Math.floor(ageMs/1000) })
-                : t('live.updating')}
-            </Text>
-            {isValidating && (
-              <Text style={[s.freshTxt,{color:'rgba(243,241,234,.35)'}]}> · SYNC</Text>
-            )}
-          </View>
-        </View>
-      </View>
-
-      {/* Tower header */}
-      <View style={s.towerHead}>
-        <Text style={[s.towerHeadL,{color:C.muted}]}>CLASIFICACIÓN EN PISTA</Text>
-        <Text style={[s.towerHeadR,{color:C.muted}]}>GAP / ÚLTIMA</Text>
-      </View>
-
-      {/* Tower */}
-      <View style={[s.tower,{backgroundColor:C.surface,borderColor:C.line}]}>
-        {standings.length === 0 ? (
-          <View style={{height:220}}>
-            <F1Loader />
-          </View>
-        ) : (
-          standings.map((d, i) => (
-            <TowerRow
-              key={d.driverNumber ?? i}
-              driver={d}
-              pos={i+1}
-              prevPos={prevPositions.current.get(d.driverNumber)}
-              highlight={highlightedDrivers.has(d.driverNumber)}
-            />
-          ))
-        )}
-      </View>
-
-      <Text style={[s.disc,{color:C.muted}]}>DATOS EN VIVO · OpenF1 · ACTUALIZA CADA 4S</Text>
-    </ScrollView>
-  );
+  return <ComingSoonState raceName={`${gpName} · ${sessName}`} />;
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
