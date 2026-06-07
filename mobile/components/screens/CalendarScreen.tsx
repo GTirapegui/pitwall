@@ -8,9 +8,10 @@ import {
   StyleSheet, Animated, Easing, useWindowDimensions, Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useTheme }     from '@/hooks/useTheme';
-import { useSchedule }  from '@/hooks/useSchedule';
-import { useNextEvent } from '@/hooks/useNextEvent';
+import { useTheme }      from '@/hooks/useTheme';
+import { useSchedule }   from '@/hooks/useSchedule';
+import { useNextEvent }  from '@/hooks/useNextEvent';
+import { useLiveStatus } from '@/hooks/useLiveStatus';
 import { useTimezone, localDateStr, formatInTz } from '@/hooks/useTimezone';
 import RaceDetailModal  from '@/components/ui/RaceDetailModal';
 import { useRaceResults } from '@/hooks/useRaceResults';
@@ -205,6 +206,42 @@ function useCountdown(iso?:string) {
     tick(); const id=setInterval(tick,1000); return()=>clearInterval(id);
   },[iso]);
   return t;
+}
+
+// ── LIVE HERO CARD ────────────────────────────────────────────────────────────
+function LiveHeroCard({ gpName, sessionName }: { gpName: string; sessionName: string }) {
+  return (
+    <View style={[s.hero,
+      Platform.OS === 'web'
+        ? {boxShadow:'0 26px 60px -30px rgba(225,6,0,.8),0 10px 30px -20px rgba(0,0,0,.7)'} as any
+        : {shadowColor:RED,shadowOpacity:.65,shadowRadius:34,shadowOffset:{width:0,height:14},elevation:22},
+    ]}>
+      <LinearGradient colors={['#1a0a0a','#0d0d12']}
+        start={{x:0,y:0}} end={{x:1,y:1}} style={StyleSheet.absoluteFill}/>
+      <SweepOverlay/>
+
+      <View style={{position:'relative',zIndex:1}}>
+        <View style={s.heroTop}>
+          <PulseRingBadge>
+            <View style={s.nextBadge}>
+              <PulseDot color="#fff" size={8}/>
+              <Text style={s.nextBadgeTxt}>AHORA EN VIVO</Text>
+            </View>
+          </PulseRingBadge>
+          <Text style={s.heroRound}>{sessionName.toUpperCase()}</Text>
+        </View>
+
+        <View style={s.heroId}>
+          <View style={{flex:1}}>
+            <Text style={s.heroGP} numberOfLines={2}>{gpName.toUpperCase()}</Text>
+            <Text style={[s.heroCircuit,{color:'rgba(255,100,100,.7)',marginTop:10}]}>
+              Timing en vivo · Próximamente
+            </Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
 }
 
 // ── HERO CARD ─────────────────────────────────────────────────────────────────
@@ -587,6 +624,7 @@ export default function CalendarScreen() {
   const { data: nextEvt }      = useNextEvent();
   const { data: standingsData } = useDriverStandings();
   const { tz, tzOption }       = useTimezone();
+  const { isLive, session: liveSession } = useLiveStatus();
 
   const now      = new Date();
   const todayKey2 = dayKey(now.getFullYear(),now.getMonth(),now.getDate());
@@ -613,17 +651,23 @@ export default function CalendarScreen() {
   },[viewMonth]);
 
   const tzLabel = tzOption?tzOption.label:'UTC';
-  const showHero = nextEvt&&nextEvt.mode!=='lastRace'&&nextEvt.meetingName;
-  const isWide   = width>=768;
+  const showHero = nextEvt && nextEvt.mode !== 'lastRace' && nextEvt.meetingName;
+  const isWide   = width >= 768;
+
+  const liveGP = liveSession
+    ? (liveSession.gp ?? '').replace('FORMULA 1', '').replace(/\d{4}$/, '').trim()
+    : '';
 
   // Left column: 420px on wide screens
   const LEFT_W = Math.min(420, width * 0.42);
 
   const leftContent = (
     <View style={{gap:20,padding:16,paddingBottom:32}}>
-      {showHero&&(
+      {isLive && liveSession ? (
+        <LiveHeroCard gpName={liveGP} sessionName={liveSession.name} />
+      ) : showHero ? (
         <HeroCard next={nextEvt as NextEventResponse} tz={tz} tzLabel={tzLabel}/>
-      )}
+      ) : null}
       <MiniCalendar
         meetings={meetings} tz={tz} dayMap={dayMap} todayKey={todayKey2}
         viewYear={viewYear} viewMonth={viewMonth}

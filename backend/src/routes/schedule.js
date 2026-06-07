@@ -45,69 +45,74 @@ async function buildFromF1Index(year) {
   return { season: year, totalRounds: raceWeekends.length, meetings: raceWeekends };
 }
 
+async function buildFromOpenF1(year) {
+  const [meetings, sessions] = await Promise.all([
+    getMeetings(year),
+    getSessions(year),
+  ]);
+
+  const sessionsByMeeting = new Map();
+  for (const s of sessions) {
+    const key = s.meeting_key;
+    if (!sessionsByMeeting.has(key)) sessionsByMeeting.set(key, []);
+    sessionsByMeeting.get(key).push({
+      sessionKey:  s.session_key,
+      sessionName: s.session_name,
+      sessionType: s.session_type,
+      dateStart:   s.date_start,
+      dateEnd:     s.date_end,
+    });
+  }
+
+  const raceWeekends = meetings
+    .filter(m => !m.meeting_name.toLowerCase().includes('test'))
+    .sort((a, b) => a.date_start.localeCompare(b.date_start))
+    .map((m, i) => ({
+      round:            i + 1,
+      meetingKey:       m.meeting_key,
+      meetingName:      m.meeting_name,
+      circuitShortName: m.circuit_short_name,
+      countryName:      m.country_name,
+      countryCode:      m.country_code,
+      location:         m.location,
+      dateStart:        m.date_start,
+      dateEnd:          m.date_end,
+      isCancelled:      m.is_cancelled,
+      sessions:         (sessionsByMeeting.get(m.meeting_key) || [])
+        .sort((a, b) => a.dateStart.localeCompare(b.dateStart)),
+    }));
+
+  return { season: year, totalRounds: raceWeekends.length, meetings: raceWeekends };
+}
+
 async function buildAndCacheSchedule(year) {
   const memKey  = `schedule_${year}`;
-  const fileKey = `schedule_${year}`;
+  const fileKey = `schedule_v2_${year}`; // v2 busts any stale pre-refactor cache
 
-  // 1. Memory cache (in-process, fastest)
+  // 1. Memory cache
   const inMem = cache.get(memKey);
   if (inMem) return inMem;
 
-  // 2. File cache (survives restarts — serves during live-race OpenF1 lockout)
+  // 2. File cache (survives restarts)
   const onDisk = fileCache.get(fileKey);
   if (onDisk) {
     cache.set(memKey, onDisk, 3600);
     return onDisk;
   }
 
-  // 3. Try OpenF1 (fails during live sessions for unauthenticated requests)
+  // 3. Primary: F1 Index.json — always accessible, has the full season calendar
   let result;
   try {
-    const [meetings, sessions] = await Promise.all([
-      getMeetings(year),
-      getSessions(year),
-    ]);
-
-    const sessionsByMeeting = new Map();
-    for (const s of sessions) {
-      const key = s.meeting_key;
-      if (!sessionsByMeeting.has(key)) sessionsByMeeting.set(key, []);
-      sessionsByMeeting.get(key).push({
-        sessionKey:  s.session_key,
-        sessionName: s.session_name,
-        sessionType: s.session_type,
-        dateStart:   s.date_start,
-        dateEnd:     s.date_end,
-      });
-    }
-
-    const raceWeekends = meetings
-      .filter(m => !m.meeting_name.toLowerCase().includes('test'))
-      .sort((a, b) => a.date_start.localeCompare(b.date_start))
-      .map((m, i) => ({
-        round:            i + 1,
-        meetingKey:       m.meeting_key,
-        meetingName:      m.meeting_name,
-        circuitShortName: m.circuit_short_name,
-        countryName:      m.country_name,
-        countryCode:      m.country_code,
-        location:         m.location,
-        dateStart:        m.date_start,
-        dateEnd:          m.date_end,
-        isCancelled:      m.is_cancelled,
-        sessions:         (sessionsByMeeting.get(m.meeting_key) || [])
-          .sort((a, b) => a.dateStart.localeCompare(b.dateStart)),
-      }));
-
-    result = { season: year, totalRounds: raceWeekends.length, meetings: raceWeekends };
-  } catch (openf1Err) {
-    // 4. OpenF1 blocked (live session) → fallback to F1 livetiming Index.json
-    console.warn('[schedule] OpenF1 unavailable, falling back to F1 Index.json:', openf1Err.message);
     result = await buildFromF1Index(year);
+    console.log(`[schedule] loaded ${result.meetings.length} races from F1 Index.json`);
+  } catch (f1Err) {
+    // 4. Fallback: OpenF1 (may be blocked during live sessions)
+    console.warn('[schedule] F1 Index.json failed, trying OpenF1:', f1Err.message);
+    result = await buildFromOpenF1(year);
   }
 
   cache.set(memKey, result, 3600);
-  fileCache.set(fileKey, result, 7 * 24 * 3600); // 7 days on disk
+  fileCache.set(fileKey, result, 6 * 3600); // 6 h on disk — refreshes daily
   return result;
 }
 

@@ -98,7 +98,10 @@
       "Bash(npx *)",
       "Bash(python3 -m json.tool)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(list\\(d.keys\\(\\)\\)[:10]\\)\")",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); first=list\\(d.items\\(\\)\\)[:2]; print\\(json.dumps\\(dict\\(first\\), indent=2\\)\\)\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); first=list\\(d.items\\(\\)\\)[:2]; print\\(json.dumps\\(dict\\(first\\), indent=2\\)\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); meetings=d.get\\('meetings',[]\\); print\\(f'Total meetings: {len\\(meetings\\)}'\\); [print\\(f' {m[\\\\\"round\\\\\"]}. {m[\\\\\"meetingName\\\\\"]} \\({m[\\\\\"dateStart\\\\\"][:10]}\\)'\\) for m in meetings]\")",
+      "Bash(python3 -c ' *)",
+      "PowerShell($r = Invoke-RestMethod \"https://pitwall-production-b3ec.up.railway.app/api/schedule\"; Write-Host \"Total:\" $r.meetings.Count; $r.meetings | ForEach-Object { Write-Host \" \" $_.round $_.meetingName $_.dateStart.Substring\\(0,10\\) })"
     ]
   }
 }
