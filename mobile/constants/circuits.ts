@@ -58,6 +58,12 @@ const CIRCUIT_LOOKUP: Record<string, string> = {
   'Gilles Villeneuve':     'villeneuve',
   'Montreal':              'villeneuve',
   'Madring':               'madrid',
+  // Jolpica locality names (may differ from OpenF1 circuit_short_name)
+  'Spa':                   'spa',
+  'Budapest':              'hungaroring',
+  'Madrid':                'madrid',
+  'Abu Dhabi':             'yas_marina',
+  'Marina Bay':            'marina_bay',
   // country_name / countryName as fallback
   'Spain':                 'barcelona',
   'United Kingdom':        'silverstone',

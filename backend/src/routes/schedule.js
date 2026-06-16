@@ -5,6 +5,16 @@ const fileCache = require('../cache/fileCache');
 const { getMeetings, getSessions } = require('../services/openf1');
 const axios     = require('axios');
 
+// ── Country name → ISO 2-letter code (for flag CDN) ──────────────────────────
+const COUNTRY_CODES = {
+  'Australia':'au','China':'cn','Japan':'jp','USA':'us','United States':'us',
+  'Canada':'ca','Monaco':'mc','Spain':'es','Austria':'at','UK':'gb',
+  'United Kingdom':'gb','Belgium':'be','Hungary':'hu','Netherlands':'nl',
+  'Italy':'it','Azerbaijan':'az','Singapore':'sg','Mexico':'mx','Brazil':'br',
+  'Qatar':'qa','UAE':'ae','United Arab Emirates':'ae','Bahrain':'bh',
+  'Saudi Arabia':'sa','France':'fr','Germany':'de','Portugal':'pt',
+};
+
 // ── Jolpica (Ergast replacement) — full season calendar ────────────────────────
 async function buildFromJolpica(year) {
   const { data } = await axios.get(
@@ -62,11 +72,11 @@ async function buildFromJolpica(year) {
 
     return {
       round:            parseInt(r.round, 10),
-      meetingKey:       parseInt(r.round, 10) * 1000, // stable unique key
+      meetingKey:       parseInt(r.round, 10) * 1000,
       meetingName:      r.raceName,
       circuitShortName: r.Circuit?.Location?.locality ?? r.Circuit?.circuitName ?? '',
       countryName:      r.Circuit?.Location?.country ?? '',
-      countryCode:      '',
+      countryCode:      COUNTRY_CODES[r.Circuit?.Location?.country ?? ''] ?? '',
       location:         r.Circuit?.Location?.locality ?? '',
       dateStart:        sessions[0]?.dateStart ?? `${r.date}T${r.time}`,
       dateEnd:          sessions[sessions.length - 1]?.dateEnd ?? `${r.date}T00:00:00Z`,
@@ -155,7 +165,7 @@ async function buildFromOpenF1(year) {
 // ── Main builder ───────────────────────────────────────────────────────────────
 async function buildAndCacheSchedule(year) {
   const memKey  = `schedule_${year}`;
-  const fileKey = `schedule_v3_${year}`; // v3 busts stale cache
+  const fileKey = `schedule_v4_${year}`; // v4: adds countryCode from COUNTRY_CODES map
 
   const inMem = cache.get(memKey);
   if (inMem) return inMem;

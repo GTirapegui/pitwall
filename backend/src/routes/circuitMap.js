@@ -83,8 +83,8 @@ router.get('/:circuitKey', async (req, res) => {
     return res.status(404).json({ error: `Unknown circuit: ${circuitKey}` });
   }
 
-  const svgMemKey  = `circuit_map_v8_${circuitKey}`;
-  const svgFileKey = `circuit_svg_${circuitKey}`;
+  const svgMemKey  = `circuit_map_v9_${circuitKey}`;   // v9: filters (0,0) GPS points
+  const svgFileKey = `circuit_svg_v2_${circuitKey}`;  // v2: filters (0,0) GPS points
 
   const cachedSvg = cache.get(svgMemKey) ?? fileCache.get(svgFileKey);
   if (cachedSvg) {
@@ -158,7 +158,8 @@ async function fetchPoints(sessionKey, driverNumber) {
         const pts = allLoc
           .filter(p => {
             const t = new Date(p.date).getTime();
-            return t >= t0 && t <= t0 + dur + 500 && p.x != null && p.y != null;
+            return t >= t0 && t <= t0 + dur + 500 &&
+                   p.x != null && p.y != null && (p.x !== 0 || p.y !== 0);
           })
           .map(p => ({ x: p.x, y: p.y }));
         if (pts.length >= 30) return pts;
@@ -170,7 +171,7 @@ async function fetchPoints(sessionKey, driverNumber) {
     const pts = allLoc
       .slice(50, 530)
       .map(p => ({ x: p.x, y: p.y }))
-      .filter(p => p.x != null && p.y != null);
+      .filter(p => p.x != null && p.y != null && (p.x !== 0 || p.y !== 0));
     return pts.length >= 20 ? pts : null;
   } catch {
     return null;
